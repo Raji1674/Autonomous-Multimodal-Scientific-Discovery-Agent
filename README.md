@@ -1,255 +1,165 @@
-# 🔬 Autonomous Multimodal Scientific Discovery Agent
+# 👩‍💻 Member 2 — Data + RAG Engineer
 
-An AI-powered research assistant that autonomously retrieves scientific literature,
-designs and runs ML experiments, critiques results statistically, and synthesises
-findings into a human-readable research report — all driven by a multi-agent LLM pipeline.
+**Branch**: `feature/member2-data-rag`
+**Project**: Autonomous Multimodal Scientific Discovery Agent
+**Role**: Owns the scientific knowledge base — data ingestion, processing, and retrieval.
+
+> For the full project overview (all 5 members), see the [`main` branch README](https://github.com/Raji1674/Autonomous-Multimodal-Scientific-Discovery-Agent/blob/main/README.md).
 
 ---
 
-## 🏗️ Overall System Architecture
+## 🎯 Responsibility
+
+This member builds the pipeline that feeds scientific knowledge to all other agents in the system.
+The Literature Agent queries this pipeline to retrieve relevant papers when evaluating hypotheses.
+
+---
+
+## 🔄 Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     ORCHESTRATION LAYER (Member 1)              │
-│          LangChain / AutoGen · LangGraph · State Management     │
-└────────┬───────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────┐     ┌──────────────────────────────────────┐
-│  Knowledge Base  │────▶│           AGENT PIPELINE             │
-│   (Member 2)     │     │                                      │
-│                  │     │  Literature Agent                    │
-│  arXiv / PubMed  │     │       ↓                              │
-│  PDF Processing  │     │  Hypothesis Agent                    │
-│  Chunking        │     │       ↓                              │
-│  Embeddings      │     │  Code Agent ──► Sandbox (Member 4)  │
-│  Vector DB       │     │       ↓                              │
-│  RAG Retrieval   │     │  Critic Agent   (Member 3)           │
-└─────────────────┘     │       ↓                              │
-                         │  Synthesis Agent (Member 5)           │
-┌─────────────────┐     └──────────────────────────────────────┘
-│  ML Experiments  │                    │
-│   (Member 3)     │                    ▼
-│                  │     ┌──────────────────────────────────────┐
-│  Datasets        │     │       DASHBOARD + OUTPUT (Member 5)  │
-│  Models          │     │  Streamlit · LaTeX Draft · Citations │
-│  Metrics         │     └──────────────────────────────────────┘
-│  Stats Analysis  │
-└─────────────────┘
+arXiv API  ──┐
+             ├──► Data Ingestion ──► PDF Processing ──► Chunking
+PubMed API ──┘                           │
+                                         ▼
+                                     Embeddings
+                                         │
+                                         ▼
+                                     Vector DB  (ChromaDB)
+                                         │
+                                         ▼
+                              Semantic RAG Retrieval
+                                         │
+                                         ▼
+                               Literature Agent (Member 1)
 ```
 
 ---
 
-## 👥 Team Roles & Responsibilities
-
-### 👩‍💻 Member 1 — Agent / LLM Architect
-> **Builds the brain and orchestration layer**
-
-- Designs and wires together all AI agents (Literature, Hypothesis, Code, Critic, Synthesis)
-- Manages agent communication, tool calling, workflow and state
-- **Tech**: LangChain / AutoGen, LangGraph, prompt engineering, structured outputs, agent memory
-
----
-
-### 👩‍💻 Member 2 — Data + RAG Engineer *(this branch)*
-> **Owns the scientific knowledge base**
-
-- Fetches papers from **arXiv** and **PubMed** APIs
-- Processes PDFs (text extraction, figures)
-- Cleans, chunks, and embeds text
-- Stores and retrieves from a **vector database**
-- Provides RAG context to the Literature Agent
-
-**Pipeline:**
-```
-arXiv / PubMed APIs
-        ↓
-   Data Ingestion
-        ↓
-  PDF Processing  (PyMuPDF)
-        ↓
-     Chunking
-        ↓
-    Embeddings
-        ↓
-    Vector DB       (ChromaDB / Milvus / Pinecone)
-        ↓
-    Retrieval
-        ↓
-      RAG
-```
-
----
-
-### 👩‍💻 Member 3 — ML + Experimentation + Critic
-> **The most ML-heavy role — runs experiments and critiques results**
-
-- Handles datasets, preprocessing, ML experiments
-- Computes metrics, p-values, confidence intervals
-- Powers the **Critic Agent** that evaluates hypotheses statistically
-- **Tech**: NumPy, Pandas, scikit-learn, Matplotlib, hypothesis testing
-
-**Pipeline:**
-```
-Hypothesis → Dataset → Experiment → Model → Metrics → Statistical Analysis → Critic
-```
-
----
-
-### 👩‍💻 Member 4 — Code Execution + Security
-> **Handles safe execution of AI-generated Python code**
-
-- Builds the sandboxed Docker execution environment
-- Manages resource limits, timeouts, and file restrictions
-- Returns stdout/stderr back to the agent loop
-- **Tech**: Docker, Dockerfiles, subprocess, Linux, security hardening
-
-**Pipeline:**
-```
-Generated Python → Safety Checks → Docker Container → Execute → stdout/stderr → Agent
-```
-
----
-
-### 👩‍💻 Member 5 — Multimodal + Dashboard + Research Synthesis
-> **Owns the human-facing layer and multimodal understanding**
-
-- Extracts figures/charts from PDFs using a Vision Language Model (VLM)
-- Synthesises all agent results into a **LaTeX research draft**
-- Builds the **Streamlit dashboard** showing agent actions, citations, costs, results
-- **Tech**: Streamlit, PyMuPDF, LLaVA (or similar VLM), LLM APIs, LaTeX
-
-**Pipeline:**
-```
-PDF → Figures/Charts → Vision Model → Extract Information
-Results → LLM → LaTeX Research Draft
-Streamlit Dashboard → Research Progress · Agent Actions · Citations · Experiments · Costs · Results
-```
-
----
-
-## 📁 Project Structure
+## 📁 Files Owned by Member 2
 
 ```
-Autonomous-Multimodal-Scientific-Discovery-Agent/
+├── data/
+│   ├── __init__.py
+│   ├── arxiv_fetcher.py       ✅ Done — fetches papers from arXiv API
+│   └── pubmed_fetcher.py      🔜 Next — fetches papers from PubMed/NCBI
 │
-├── agents/                    # Member 1 — Orchestration & agent definitions
-│   ├── literature_agent.py
-│   ├── hypothesis_agent.py
-│   ├── code_agent.py
-│   ├── critic_agent.py
-│   └── synthesis_agent.py
+├── rag/
+│   ├── __init__.py
+│   ├── cleaner.py             🔜 Strips HTML, normalises whitespace
+│   ├── chunker.py             🔜 Splits text into overlapping chunks
+│   ├── embedder.py            🔜 Generates sentence embeddings
+│   └── vector_store.py        🔜 ChromaDB: store and query vectors
 │
-├── data/                      # Member 2 — Paper fetchers
-│   ├── arxiv_fetcher.py
-│   └── pubmed_fetcher.py
-│
-├── rag/                       # Member 2 — RAG pipeline
-│   ├── cleaner.py
-│   ├── chunker.py
-│   ├── embedder.py
-│   └── vector_store.py
-│
-├── experiments/               # Member 3 — ML experiments & critic
-│   ├── dataset_loader.py
-│   ├── trainer.py
-│   ├── metrics.py
-│   └── critic.py
-│
-├── sandbox/                   # Member 4 — Docker code execution
-│   ├── executor.py
-│   ├── safety_checks.py
-│   └── Dockerfile
-│
-├── dashboard/                 # Member 5 — Streamlit UI & synthesis
-│   ├── app.py
-│   ├── multimodal.py
-│   └── latex_writer.py
-│
-├── pipeline.py                # End-to-end RAG prototype (Member 2)
-├── requirements.txt           # Python dependencies
-├── .env.example               # Environment variable template (copy → .env)
-└── README.md
-```
-
----
-
-## ⚙️ Setup
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/Raji1674/Autonomous-Multimodal-Scientific-Discovery-Agent.git
-cd Autonomous-Multimodal-Scientific-Discovery-Agent
-```
-
-### 2. Create a virtual environment
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-```bash
-# Windows
-copy .env.example .env
-# macOS / Linux
-cp .env.example .env
-# Then open .env and fill in your ENTREZ_EMAIL (required for PubMed)
-```
-
----
-
-## 🚀 Quick Start — RAG Pipeline (Member 2)
-
-```python
-from pipeline import run_pipeline
-
-# Fetch papers on a topic, embed them, and retrieve the most relevant chunks
-results = run_pipeline(query="CRISPR gene editing cancer therapy", top_k=5)
-for r in results:
-    print(r["title"], "—", r["source"])
+├── pipeline.py                🔜 End-to-end glue: fetch → chunk → embed → retrieve
+├── requirements.txt           ✅ Done
+└── .env.example               ✅ Done
 ```
 
 ---
 
 ## 🧱 Technology Stack
 
-| Layer | Component | Library / Tool |
-|-------|-----------|----------------|
-| Orchestration | Agent framework | LangChain / AutoGen |
-| Orchestration | Workflow | LangGraph |
-| RAG | arXiv API | `arxiv` |
-| RAG | PubMed API | `biopython` (Entrez) |
-| RAG | PDF processing | `PyMuPDF` (fitz) |
-| RAG | Text cleaning | `beautifulsoup4` |
-| RAG | Chunking | `langchain-text-splitters` |
-| RAG | Embeddings | `sentence-transformers` |
-| RAG | Vector DB | `chromadb` (local) / Milvus / Pinecone |
-| ML | Experiments | NumPy, Pandas, scikit-learn |
-| ML | Visualisation | Matplotlib |
-| Sandbox | Code execution | Docker, subprocess |
-| Dashboard | UI | Streamlit |
-| Dashboard | Multimodal | LLaVA (VLM) |
-| Dashboard | Report | LaTeX |
+| Component | Library | Notes |
+|-----------|---------|-------|
+| arXiv API | `arxiv==2.1.3` | No API key needed |
+| PubMed API | `biopython==1.84` | Requires `ENTREZ_EMAIL` in `.env` |
+| PDF text extraction | `PyMuPDF==1.24.14` | `import fitz` |
+| HTML cleaning | `beautifulsoup4==4.12.3` | Strip tags from abstracts |
+| Text chunking | `langchain-text-splitters==0.3.8` | Recursive splitter, configurable overlap |
+| Embeddings | `sentence-transformers==3.3.1` | Model: `all-MiniLM-L6-v2` (runs locally) |
+| Vector database | `chromadb==0.5.23` | Local persistence, no server needed |
+| Utilities | `python-dotenv`, `tqdm`, `requests` | Config, progress bars, HTTP |
 
 ---
 
-## 🌿 Git Branch Convention
+## ⚙️ Setup for Member 2
 
-| Member | Branch |
-|--------|--------|
-| Member 1 | `feature/member1-orchestration` |
-| Member 2 | `feature/member2-data-rag` |
-| Member 3 | `feature/member3-ml-critic` |
-| Member 4 | `feature/member4-sandbox` |
-| Member 5 | `feature/member5-dashboard` |
+### 1. Clone and switch to this branch
+```bash
+git clone https://github.com/Raji1674/Autonomous-Multimodal-Scientific-Discovery-Agent.git
+cd Autonomous-Multimodal-Scientific-Discovery-Agent
+git checkout feature/member2-data-rag
+```
 
-> All feature branches merge into `main` via Pull Requests.
+### 2. Create and activate virtual environment
+```bash
+# Create (Windows — use Python 3.10)
+python -m venv venv
+
+# Activate (Windows)
+.\venv\Scripts\activate
+
+# Activate (macOS / Linux)
+source venv/bin/activate
+```
+
+### 3. Install all dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Set up environment variables
+```bash
+copy .env.example .env       # Windows
+cp .env.example .env         # macOS / Linux
+```
+Then open `.env` and fill in:
+```
+ENTREZ_EMAIL=your_email@example.com   # any valid email, required for PubMed
+```
+
+---
+
+## 🚀 Quick Test — arXiv Fetcher
+
+After activating your venv:
+
+```bash
+python data/arxiv_fetcher.py
+```
+
+Expected output:
+```
+INFO: [arXiv] Searching for: 'large language models scientific discovery' (max 3 results)
+INFO:   ✓ Fetched: A Comprehensive Survey of Scientific Large Language Models...
+INFO:   ✓ Fetched: Hierarchical Multi-agent Large Language Model Reasoning...
+INFO: [arXiv] Done. Fetched 3 papers.
+
+============================================================
+Fetched 3 papers from arXiv
+============================================================
+
+[1] A Comprehensive Survey of Scientific Large Language Models...
+     Authors  : Yu Zhang, Xiusi Chen, Bowen Jin...
+     Published: 2024-06-16
+     ...
+```
+
+---
+
+## 📊 Progress Tracker
+
+| Step | Task | Status |
+|------|------|--------|
+| 1 | Project scaffold (requirements, .env, folders) | ✅ Done |
+| 2 | arXiv fetcher (`data/arxiv_fetcher.py`) | ✅ Done — live tested |
+| 3 | PubMed fetcher (`data/pubmed_fetcher.py`) | 🔜 In progress |
+| 4 | Text cleaner (`rag/cleaner.py`) | ⬜ Pending |
+| 5 | Chunker (`rag/chunker.py`) | ⬜ Pending |
+| 6 | Embedder (`rag/embedder.py`) | ⬜ Pending |
+| 7 | Vector store (`rag/vector_store.py`) | ⬜ Pending |
+| 8 | End-to-end pipeline (`pipeline.py`) | ⬜ Pending |
+
+---
+
+## 🔑 Key Concepts (Beginner Reference)
+
+| Term | Plain-English Explanation |
+|------|---------------------------|
+| **API** | A URL you call to get data back (like ordering from a menu) |
+| **RAG** | Retrieval-Augmented Generation — give the AI real documents to read before answering |
+| **Embedding** | Turning text into a list of numbers that captures its *meaning* |
+| **Vector DB** | A database that finds documents with *similar meanings* (not just matching keywords) |
+| **Chunk** | A small piece of a larger document (e.g. 500 words with 50-word overlap) |
+| **Semantic Search** | Finding documents by meaning, not exact words |
