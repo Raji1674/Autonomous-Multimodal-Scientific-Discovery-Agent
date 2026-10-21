@@ -1,0 +1,5 @@
+# provider: gemini | groq | openrouter
+# model: check the provider's CURRENT model list before setting (names change often)
+provider: gemini
+model: set-me
+temperature: 0.2
