@@ -89,7 +89,13 @@ def corrected_resampled_ttest(diffs, n_train: int, n_test: int, alpha: float = 0
     d = np.asarray(diffs, dtype=float)
     k, m, v = len(d), float(d.mean()), float(d.var(ddof=1))
     if is_constant(d):
-        return {"t": None, "df": k - 1, "p": 1.0 if abs(m) <= EPS else 0.0, "ci": (m, m), "se": 0.0}
+        return {
+             "t": None,
+             "df": k - 1,
+             "p": 1.0 if abs(m) <= EPS else None,
+             "ci": (m, m),
+              "se": 0.0,
+    }
     se = math.sqrt((1.0 / k + n_test / n_train) * v)
     t = m / se
     p = float(2 * stats.t.sf(abs(t), k - 1))
