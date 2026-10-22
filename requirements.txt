@@ -10,3 +10,5 @@ biopython>=1.83
 sentence-transformers>=3.0
 schedule>=1.2
 pytest>=8.0
+pandas>=2.0
+scikit-learn>=1.4
