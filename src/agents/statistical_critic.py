@@ -72,14 +72,24 @@ class StatisticalCritic:
         self.overfit_gap = float(overfit_gap)
 
     def evaluate(self, plan: dict, result: dict, n_tests: int = 1) -> dict:
-        """Evaluate paired experiment scores and return a deterministic verdict.
+        """Validate a built-in experiment plan, then evaluate its scores."""
+        validated_plan = ExperimentPlan(**plan).model_dump()
+        return self.evaluate_scores(
+            result=result,
+            expected_direction=validated_plan["expected_direction"],
+            n_tests=n_tests,
+        )
 
-        n_tests is the total number of hypotheses tested. Bonferroni correction
-        is applied as p_adjusted = min(1, p * n_tests).
+    def evaluate_scores(
+        self,
+        result: dict,
+        expected_direction: str = "higher",
+        n_tests: int = 1,
+    ) -> dict:
+        """Evaluate paired scores without requiring a built-in dataset plan."""
+        if expected_direction not in {"higher", "lower"}:
+            raise ValueError("expected_direction must be 'higher' or 'lower'")
 
-        Returns analysis, verdict, issues, statistical_quality, reasons and
-        n_tests. The LLM is not used to calculate the verdict.
-        """
         if (
             isinstance(n_tests, bool)
             or not isinstance(n_tests, (int, np.integer))
@@ -93,8 +103,6 @@ class StatisticalCritic:
             raise ResultError(
                 f"cannot analyse a result labelled {result['result_label']!r}"
             )
-
-        validated_plan = ExperimentPlan(**plan).model_dump()
 
         analysis = paired_analysis(
             result["baseline"],
@@ -112,32 +120,18 @@ class StatisticalCritic:
         n = analysis["n"]
 
         if n < self.min_seeds:
-            flag(
-                "critical",
-                f"only {n} paired runs; need at least {self.min_seeds}",
-            )
+            flag("critical", f"only {n} paired runs; need at least {self.min_seeds}")
         elif n < 20:
-            flag(
-                "minor",
-                f"{n} paired runs is small; 20+ is preferable",
-            )
+            flag("minor", f"{n} paired runs is small; 20+ is preferable")
 
         if analysis["test"] == "insufficient_data":
             return self._pack(
-                analysis,
-                "inconclusive",
-                issues,
-                ["not enough paired runs for any test"],
-                n_tests,
+                analysis, "inconclusive", issues,
+                ["not enough paired runs for any test"], n_tests,
             )
 
-        normality = analysis.get("normality") or {}
-
-        if normality.get("normal") is False:
-            flag(
-                "minor",
-                "differences are not normal; used Wilcoxon + bootstrap CI",
-            )
+        if (analysis.get("normality") or {}).get("normal") is False:
+            flag("minor", "differences are not normal; used Wilcoxon + bootstrap CI")
 
         if analysis["test"] == "paired_t":
             flag(
@@ -150,148 +144,74 @@ class StatisticalCritic:
         treatment = analysis["treatment"]
 
         if baseline["sd"] <= 1e-12 and treatment["sd"] <= 1e-12:
-            flag(
-                "minor",
-                "zero variance across seeds (deterministic scores); check that "
-                "the seeds actually vary the split",
-            )
+            flag("minor", "zero variance across seeds; check that splits vary")
 
         if baseline["mean"] > 0.99 and treatment["mean"] > 0.99:
-            flag(
-                "minor",
-                "ceiling effect: both arms are near-perfect, so differences "
-                "are hard to detect",
-            )
+            flag("minor", "ceiling effect: both arms are near-perfect")
 
         if n_tests > 1:
-            flag(
-                "info",
-                f"multiple comparisons: Bonferroni correction applied over "
-                f"{n_tests} tests",
-            )
+            flag("info", f"multiple comparisons: Bonferroni correction applied over {n_tests} tests")
 
         train_scores = result.get("treatment_train")
         test_scores = result.get("treatment")
-
-        if train_scores is not None and len(train_scores) > 0:
-            if test_scores is not None and len(test_scores) > 0:
-                train_test_gap = float(
-                    np.mean(train_scores) - np.mean(test_scores)
-                )
-                if train_test_gap > self.overfit_gap:
-                    flag(
-                        "minor",
-                        "possible overfitting: train-test gap "
-                        f"{train_test_gap:.3f} in the treatment arm",
-                    )
+        if train_scores and test_scores:
+            gap = float(np.mean(train_scores) - np.mean(test_scores))
+            if gap > self.overfit_gap:
+                flag("minor", f"possible overfitting: train-test gap {gap:.3f}")
 
         p_value = analysis["p"]
-        p_adjusted = (
-            None
-            if p_value is None
-            else min(1.0, float(p_value) * int(n_tests))
-        )
+        p_adjusted = None if p_value is None else min(1.0, float(p_value) * int(n_tests))
         analysis["p_adjusted"] = p_adjusted
 
-        # A critical issue prevents a positive verdict.
         if any(issue["severity"] == "critical" for issue in issues):
             return self._pack(
-                analysis,
-                "inconclusive",
-                issues,
-                ["critical issue (see issues)"],
-                n_tests,
+                analysis, "inconclusive", issues,
+                ["critical issue (see issues)"], n_tests,
             )
 
         difference = analysis["mean_diff"]
-        confidence_interval = analysis["ci"]
+        ci = analysis["ci"]
         effect_size = analysis["effect_size"]
 
-        # Missing statistical values must not cause formatting errors or
-        # an unjustified accept/reject verdict.
-        if (
-            p_adjusted is None
-            or confidence_interval is None
-            or difference is None
-        ):
+        if p_adjusted is None or ci is None or difference is None:
             return self._pack(
-                analysis,
-                "inconclusive",
-                issues,
+                analysis, "inconclusive", issues,
                 ["insufficient statistical output to determine a verdict"],
                 n_tests,
             )
 
         significant = p_adjusted < self.alpha
-
-        ci_excludes_zero = (
-            confidence_interval[0] > 0 or confidence_interval[1] < 0
-        )
-
-        practical_difference_ok = (
-            abs(difference) >= self.min_abs_diff
-        )
-
-        effect_size_ok = (
-            effect_size is None
-            or abs(effect_size) >= self.min_effect
-        )
-
-        expected_direction = validated_plan["expected_direction"]
-        correct_direction = (
+        ci_excludes_zero = ci[0] > 0 or ci[1] < 0
+        practical_ok = abs(difference) >= self.min_abs_diff
+        effect_ok = effect_size is None or abs(effect_size) >= self.min_effect
+        direction_ok = (
             (difference > 0) == (expected_direction == "higher")
         )
 
         reasons: list[str] = []
-
         if not significant:
-            reasons.append(
-                f"adjusted p={p_adjusted:.4g} is not below "
-                f"alpha={self.alpha}"
-            )
-
+            reasons.append(f"adjusted p={p_adjusted:.4g} is not below alpha={self.alpha}")
         if not ci_excludes_zero:
             reasons.append("confidence interval includes 0")
-
-        if not practical_difference_ok:
+        if not practical_ok:
             reasons.append(
                 f"|mean difference| {abs(difference):.4f} is below "
                 f"the practical threshold {self.min_abs_diff}"
             )
-
-        if not effect_size_ok:
-            reasons.append(
-                f"|effect size| {abs(effect_size):.2f} is below "
-                f"{self.min_effect}"
-            )
-
-        if significant and ci_excludes_zero and not correct_direction:
-            reasons.append(
-                "significant effect in the OPPOSITE direction to the hypothesis"
-            )
+        if not effect_ok:
+            reasons.append(f"|effect size| {abs(effect_size):.2f} is below {self.min_effect}")
+        if significant and ci_excludes_zero and not direction_ok:
+            reasons.append("significant effect in the OPPOSITE direction to the hypothesis")
 
         verdict = (
             "accept"
-            if (
-                significant
-                and ci_excludes_zero
-                and practical_difference_ok
-                and effect_size_ok
-                and correct_direction
-            )
+            if significant and ci_excludes_zero and practical_ok and effect_ok and direction_ok
             else "reject"
         )
-
         if verdict == "accept":
             reasons.append("all pre-set criteria met")
 
-        return self._pack(
-            analysis,
-            verdict,
-            issues,
-            reasons,
-            n_tests,
-        )
+        return self._pack(analysis, verdict, issues, reasons, n_tests)
 
     @staticmethod
     def _pack(
