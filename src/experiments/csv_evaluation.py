@@ -1,6 +1,6 @@
 
 from pathlib import Path
-
+import math
 import pandas as pd
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
@@ -24,11 +24,16 @@ def evaluate_csv_models(
     test_size: float = 0.2,
 ) -> dict:
     """Compare two Random Forest configurations on paired CSV splits."""
+    if not isinstance(n_seeds, int) or isinstance(n_seeds, bool) or n_seeds < 2:
+     raise ValueError("n_seeds must be an integer greater than or equal to 2")
 
-    if n_seeds < 2:
-        raise ValueError("n_seeds must be at least 2")
-    if not 0.1 <= test_size <= 0.5:
-        raise ValueError("test_size must be between 0.1 and 0.5")
+    if (
+     isinstance(test_size, bool)
+     or not isinstance(test_size, (int, float))
+     or not math.isfinite(test_size)
+     or not 0.1 <= test_size <= 0.5
+):
+      raise ValueError("test_size must be a finite number between 0.1 and 0.5")
 
     validation = validate_csv_dataset(file_path, target_column)
     if not validation["valid"]:
