@@ -1,0 +1,318 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Scientific Discovery Agent</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f9;
+            color: #263238;
+            margin: 0;
+            padding: 30px;
+        }
+        main {
+            max-width: 1050px;
+            margin: auto;
+        }
+        section {
+            background: white;
+            padding: 22px;
+            margin: 20px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px #00000012;
+        }
+        input, select, button {
+            padding: 10px;
+            margin: 6px 4px;
+        }
+        button {
+            background: #2457a7;
+            color: white;
+            border: 0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 12px;
+            display: block;
+            overflow-x: auto;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 9px;
+            text-align: left;
+        }
+        th {
+            background: #edf1f7;
+        }
+        .message {
+            padding: 12px;
+            background: #e8f1ff;
+            border-radius: 6px;
+        }
+        .verdict {
+            font-size: 22px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .metric {
+            display: inline-block;
+            background: #edf3fa;
+            padding: 12px;
+            margin: 5px;
+            border-radius: 6px;
+        }
+        .error {
+            color: #b42318;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Autonomous Multimodal Scientific Discovery Agent</h1>
+    <p>Discover datasets, validate data, run experiments and evaluate results.</p>
+
+    {% if message %}
+        <p class="message">{{ message }}</p>
+    {% endif %}
+
+    <section>
+        <h2>1. Search Public Datasets</h2>
+        <form action="/search" method="get">
+            <input
+                name="keyword"
+                value="{{ keyword or '' }}"
+                placeholder="e.g. diabetes prediction"
+                required
+            >
+            <button type="submit">Search Datasets</button>
+        </form>
+
+        {% if datasets %}
+            <ul>
+                {% for dataset in datasets %}
+                    <li>
+                        <a href="{{ dataset.url }}" target="_blank"
+                           rel="noopener noreferrer">
+                            {{ dataset.name }}
+                        </a>
+                        — Downloads: {{ dataset.downloads }}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% elif keyword %}
+            <p>No datasets found. Try another keyword.</p>
+        {% endif %}
+    </section>
+
+    <section>
+        <h2>2. Upload CSV Dataset</h2>
+        <form action="/" method="post" enctype="multipart/form-data">
+            <input type="file" name="csv_file" accept=".csv" required>
+            <button type="submit">Upload CSV</button>
+        </form>
+
+        {% if columns %}
+            <p><strong>Total rows:</strong> {{ row_count if row_count is not none else "See uploaded dataset" }}</p>
+            <p><strong>Columns:</strong> {{ columns | join(", ") }}</p>
+
+            <h3>Dataset Preview (First 5 Rows)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        {% for column in columns %}
+                            <th>{{ column }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in preview %}
+                        <tr>
+                            {% for column in columns %}
+                                <td>{{ row[column] }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </section>
+
+    {% if uploaded and columns %}
+    <section>
+        <h2>3. Select Target and Train Model</h2>
+        <form action="/train" method="post">
+            <label for="train_target">Target column:</label>
+            <select id="train_target" name="target_column" required>
+                {% for column in columns %}
+                    <option value="{{ column }}">{{ column }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Train Random Forest</button>
+        </form>
+
+        {% if train_result %}
+            {% if train_result.success %}
+                <h3>Training Results</h3>
+                <div class="metric">
+                    Accuracy: {{ "%.4f"|format(train_result.accuracy) }}
+                </div>
+                <div class="metric">
+                    Macro F1: {{ "%.4f"|format(train_result.f1_macro) }}
+                </div>
+                <div class="metric">
+                    Training rows: {{ train_result.train_rows }}
+                </div>
+                <div class="metric">
+                    Testing rows: {{ train_result.test_rows }}
+                </div>
+                <p>Model: {{ train_result.model }}</p>
+            {% else %}
+                <h3 class="error">Training Issues</h3>
+                <ul>
+                    {% for issue in train_result.issues %}
+                        <li>{{ issue }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endif %}
+    </section>
+
+    <section>
+        <h2>4. Run Experiment and Statistical Critic</h2>
+        <p>
+            Compare two Random Forest configurations using paired,
+            reproducible train/test splits.
+        </p>
+
+        <form action="/evaluate" method="post">
+            <label for="eval_target">Target column:</label>
+            <select id="eval_target" name="target_column" required>
+                {% for column in columns %}
+                    <option value="{{ column }}">{{ column }}</option>
+                {% endfor %}
+            </select>
+
+            <p>
+                <label for="n_seeds">Number of paired runs:</label>
+                <input id="n_seeds" name="n_seeds"
+                       type="number" min="2" max="100" value="20">
+            </p>
+
+            <p>
+                <label for="test_size">Test size:</label>
+                <input id="test_size" name="test_size"
+                       type="number" min="0.1" max="0.5"
+                       step="0.05" value="0.2">
+            </p>
+
+            <p>
+                <label for="direction">Expected direction:</label>
+                <select id="direction" name="expected_direction">
+                    <option value="higher">Higher score is better</option>
+                    <option value="lower">Lower score is better</option>
+                </select>
+            </p>
+
+            <button type="submit">Run Experiment and Critic</button>
+        </form>
+
+        {% if evaluation_result %}
+            {% if evaluation_result.success %}
+                {% set exp = evaluation_result.experiment %}
+                {% set critic = evaluation_result.critic %}
+                {% set analysis = critic.analysis %}
+
+                <h3>Experiment Results</h3>
+                <div class="metric">
+                    Baseline mean:
+                    {{ "%.4f"|format(analysis.baseline.mean) }}
+                </div>
+                <div class="metric">
+                    Treatment mean:
+                    {{ "%.4f"|format(analysis.treatment.mean) }}
+                </div>
+                <div class="metric">
+                    Mean difference:
+                    {{ "%.4f"|format(analysis.mean_diff) }}
+                </div>
+                <div class="metric">
+                    Paired runs: {{ analysis.n }}
+                </div>
+
+                <h3>Statistical Critic Verdict</h3>
+                <p class="verdict">{{ critic.verdict }}</p>
+
+                <div class="metric">
+                    Statistical quality:
+                    {{ critic.statistical_quality }}/10
+                </div>
+                <div class="metric">
+                    Test: {{ analysis.test }}
+                </div>
+                <div class="metric">
+                    P-value:
+                    {{ analysis.p if analysis.p is not none else "Unavailable" }}
+                </div>
+                <div class="metric">
+                    Adjusted p-value:
+                    {{ analysis.p_adjusted if analysis.p_adjusted is not none else "Unavailable" }}
+                </div>
+                <div class="metric">
+                    Effect size:
+                    {{ analysis.effect_size if analysis.effect_size is not none else "Unavailable" }}
+                </div>
+
+                {% if analysis.ci %}
+                    <p>
+                        <strong>Confidence interval:</strong>
+                        {{ analysis.ci[0] }} to {{ analysis.ci[1] }}
+                    </p>
+                {% endif %}
+
+                <h4>Critic Reasons</h4>
+                <ul>
+                    {% for reason in critic.reasons %}
+                        <li>{{ reason }}</li>
+                    {% endfor %}
+                </ul>
+
+                <h4>Quality Issues</h4>
+                {% if critic.issues %}
+                    <ul>
+                        {% for issue in critic.issues %}
+                            <li>
+                                <strong>{{ issue.severity }}:</strong>
+                                {{ issue.message }}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p>No quality issues reported.</p>
+                {% endif %}
+
+                <p>
+                    <strong>Interpretation:</strong>
+                    Accept means the pre-set statistical criteria were met.
+                    It does not prove that the hypothesis is scientifically true.
+                </p>
+            {% else %}
+                <h3 class="error">Evaluation Issues</h3>
+                <p>Stage: {{ evaluation_result.stage }}</p>
+                <ul>
+                    {% for issue in evaluation_result.issues %}
+                        <li>{{ issue }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endif %}
+    </section>
+    {% endif %}
+</main>
+</body>
+</html>
