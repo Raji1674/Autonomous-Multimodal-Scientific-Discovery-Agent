@@ -173,17 +173,30 @@ class StatisticalCritic:
         ci = analysis["ci"]
         effect_size = analysis["effect_size"]
 
-        if p_adjusted is None or ci is None or difference is None:
+        if (
+            p_adjusted is None
+            or ci is None
+            or difference is None
+            or effect_size is None
+            or not np.isfinite(effect_size)
+):
             return self._pack(
-                analysis, "inconclusive", issues,
-                ["insufficient statistical output to determine a verdict"],
-                n_tests,
-            )
+        analysis,
+        "inconclusive",
+        issues,
+        ["undefined or insufficient statistical output"],
+        n_tests,
+)
+            
 
         significant = p_adjusted < self.alpha
         ci_excludes_zero = ci[0] > 0 or ci[1] < 0
         practical_ok = abs(difference) >= self.min_abs_diff
-        effect_ok = effect_size is None or abs(effect_size) >= self.min_effect
+        effect_ok = (
+    effect_size is not None
+    and np.isfinite(effect_size)
+    and abs(effect_size) >= self.min_effect
+)
         direction_ok = (
             (difference > 0) == (expected_direction == "higher")
         )
