@@ -137,14 +137,16 @@ def evaluate_csv_models(
     )
 
     return {
-        "success": True,
-        "result_label": "executed",
-        "dataset": Path(file_path).name,
-        "target_column": target_column,
-        "baseline_params": base_params,
-        "treatment_params": treat_params,
-        "baseline": baseline_scores,
-        "treatment": treatment_scores,
-        "n_seeds": n_seeds,
-        "analysis": analysis,
-    }
+    "success": True,
+    "result_label": "executed",
+    "dataset": Path(file_path).name,
+    "target_column": target_column,
+    "baseline_params": base_params,
+    "treatment_params": treat_params,
+    "baseline": baseline_scores,
+    "treatment": treatment_scores,
+    "n_seeds": n_seeds,
+    "n_train": len(X_train),
+    "n_test": len(X_test),
+    "analysis": analysis,
+}

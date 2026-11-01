@@ -37,23 +37,41 @@ def validate_csv_dataset(
     if target_column not in df.columns:
         issues.append(f"Target column {target_column!r} not found")
 
-    if df.isna().any().any():
-        issues.append("Missing values found; preprocessing is required")
-
-    if df.duplicated().any():
-        issues.append("Duplicate rows found")
+    missing_values = int(df.isna().sum().sum())
+    missing_feature_values = 0
+    missing_target_values = 0
 
     if target_column in df.columns:
+        features = df.drop(columns=[target_column])
         target = df[target_column]
 
-        if target.nunique(dropna=True) < 2:
-            issues.append("Target must contain at least two classes")
+        missing_feature_values = int(features.isna().sum().sum())
+        missing_target_values = int(target.isna().sum())
 
-        if target.nunique(dropna=True) > 50:
+        # Missing feature values can be handled by preprocessing.
+        all_null_features = features.columns[features.isna().all()].tolist()
+
+        if all_null_features:
+            issues.append(
+                f"Features contain only missing values: {all_null_features}"
+            )
+
+        # Missing target rows must be removed before training.
+        labelled_target = target.dropna()
+
+        if labelled_target.nunique() < 2:
+            issues.append(
+                "Target must contain at least two classes after removing missing labels"
+            )
+
+        if labelled_target.nunique() > 50:
             issues.append(
                 "Target has more than 50 unique values; "
                 "check whether this is a classification task"
             )
+
+    if df.duplicated().any():
+        issues.append("Duplicate rows found")
 
     return {
         "valid": not issues,
@@ -66,7 +84,9 @@ def validate_csv_dataset(
             if target_column in df.columns
             else None
         ),
-        "missing_values": int(df.isna().sum().sum()),
+        "missing_values": missing_values,
+        "missing_feature_values": missing_feature_values,
+        "missing_target_values": missing_target_values,
         "duplicate_rows": int(df.duplicated().sum()),
         "issues": issues,
     }

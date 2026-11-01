@@ -36,14 +36,16 @@ def evaluate_csv_with_critic(
 
     critic = StatisticalCritic()
     verdict = critic.evaluate_scores(
-        result={
-    "result_label": "executed",
-    "baseline": experiment["baseline"],
-    "treatment": experiment["treatment"],
-     },
-        expected_direction=expected_direction,
-        n_tests=n_tests,
-    )
+    result={
+        "result_label": "executed",
+        "baseline": experiment["baseline"],
+        "treatment": experiment["treatment"],
+        "n_train": experiment["n_train"],
+        "n_test": experiment["n_test"],
+    },
+    expected_direction=expected_direction,
+    n_tests=n_tests,
+)
 
     return {
         "success": True,
@@ -51,4 +53,4 @@ def evaluate_csv_with_critic(
         "target_column": target_column,
         "experiment": experiment,
         "critic": verdict,
-    }
+        }
