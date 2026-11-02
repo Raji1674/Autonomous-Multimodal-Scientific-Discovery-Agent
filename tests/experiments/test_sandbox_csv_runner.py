@@ -121,3 +121,93 @@ def test_sandbox_csv_runner_rejects_invalid_seed_count(tmp_path, monkeypatch):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "n_seeds" in str(exc)
+
+
+def test_sandbox_runner_rejects_accuracy_out_of_range(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    dataset = tmp_path / "data" / "downloaded" / "sample.csv"
+    create_dataset(dataset)
+
+    experiment = {
+        "result_label": "executed",
+        "baseline": [0.8] * 10,
+        "treatment": [1.5] * 10,
+        "n_seeds": 10,
+        "n_train": 16,
+        "n_test": 4,
+    }
+
+    monkeypatch.setattr(
+        runner,
+        "execute_python",
+        lambda code, dataset_path: {
+            "result_label": "executed",
+            "output": json.dumps(experiment),
+            "output_truncated": False,
+        },
+    )
+
+    result = runner.run_sandbox_csv_experiment(
+        dataset, "target", n_seeds=10
+    )
+
+    assert result["success"] is False
+    assert result["stage"] == "result_validation"
+
+
+def test_sandbox_runner_rejects_invalid_train_size(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    dataset = tmp_path / "data" / "downloaded" / "sample.csv"
+    create_dataset(dataset)
+
+    experiment = {
+        "result_label": "executed",
+        "baseline": [0.8] * 10,
+        "treatment": [0.9] * 10,
+        "n_seeds": 10,
+        "n_train": 0,
+        "n_test": 4,
+    }
+
+    monkeypatch.setattr(
+        runner,
+        "execute_python",
+        lambda code, dataset_path: {
+            "result_label": "executed",
+            "output": json.dumps(experiment),
+            "output_truncated": False,
+        },
+    )
+
+    result = runner.run_sandbox_csv_experiment(
+        dataset, "target", n_seeds=10
+    )
+
+    assert result["success"] is False
+    assert result["stage"] == "result_validation"
+
+
+def test_sandbox_runner_rejects_truncated_output(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    dataset = tmp_path / "data" / "downloaded" / "sample.csv"
+    create_dataset(dataset)
+
+    monkeypatch.setattr(
+        runner,
+        "execute_python",
+        lambda code, dataset_path: {
+            "result_label": "executed",
+            "output": "{}",
+            "output_truncated": True,
+        },
+    )
+
+    result = runner.run_sandbox_csv_experiment(
+        dataset, "target", n_seeds=10
+    )
+
+    assert result["success"] is False
+    assert result["stage"] == "result_validation"

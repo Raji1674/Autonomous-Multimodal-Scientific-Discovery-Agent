@@ -218,6 +218,12 @@ print(json.dumps(result, allow_nan=False))
             "stage": "sandbox",
             "issues": [str(exc)],
         }
+    if docker_result.get("output_truncated"):
+        return {
+            "success": False,
+            "stage": "result_validation",
+            "issues": ["Docker output was truncated; experiment result cannot be trusted"],
+        }
 
     if docker_result["result_label"] != "executed":
         return {
@@ -241,6 +247,39 @@ print(json.dumps(result, allow_nan=False))
             "stage": "result_validation",
             "issues": ["Experiment result is not labelled executed"],
         }
+        # Validate accuracy scores returned by the Docker container.
+    for key in ("baseline", "treatment"):
+        scores = result.get(key)
+
+        if not isinstance(scores, list) or len(scores) != n_seeds:
+            return {
+                "success": False,
+                "stage": "result_validation",
+                "issues": [f"Invalid {key} score array"],
+            }
+
+        if any(
+            isinstance(score, bool)
+            or not isinstance(score, (int, float))
+            or not math.isfinite(score)
+            or not 0 <= score <= 1
+            for score in scores
+        ):
+            return {
+                "success": False,
+                "stage": "result_validation",
+                "issues": [f"{key} scores must be finite accuracy values between 0 and 1"],
+            }
+
+    for key in ("n_train", "n_test"):
+        value = result.get(key)
+
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            return {
+                "success": False,
+                "stage": "result_validation",
+                "issues": [f"{key} must be a positive integer"],
+            }
 
     if (
         not isinstance(result.get("baseline"), list)
