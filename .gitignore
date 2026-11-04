@@ -1,4 +1,19 @@
+# Environment and secrets
 .env
 .venv/
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Test cache
+.pytest_cache/
+
+# Generated experiment outputs
+outputs/
+
+# Uploaded files
+web/uploads/*
+!web/uploads/.gitkeep
