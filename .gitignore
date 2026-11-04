@@ -17,3 +17,6 @@ outputs/
 # Uploaded files
 web/uploads/*
 !web/uploads/.gitkeep
+
+# Generated vector database
+data/chroma/

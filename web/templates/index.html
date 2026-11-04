@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,37 +10,43 @@
     <h1>Autonomous Scientific Discovery</h1>
     <p>Find datasets and run machine learning experiments.</p>
 
+    <!-- Dataset Search -->
     <h2>Search for a Dataset</h2>
-   <form action="/search" method="get">
-    <label for="keyword">Research keyword:</label>
-    <input
-        id="keyword"
-        name="keyword"
-        value="{{ keyword or '' }}"
-        placeholder="e.g. diabetes prediction"
-        required
-    >
-    <button type="submit">Search Datasets</button>
-</form>
 
-{% if datasets %}
-    <h2>Search Results</h2>
-    <ul>
-        {% for dataset in datasets %}
-            <li>
-                <a href="{{ dataset.url }}" target="_blank"
-                   rel="noopener noreferrer">
-                    {{ dataset.name }}
-                </a>
-                — Downloads: {{ dataset.downloads }}
-            </li>
-        {% endfor %}
-    </ul>
-{% elif keyword %}
-    <p>No datasets found for "{{ keyword }}". Try another keyword.</p>
-{% endif %}
+    <form action="/search" method="get">
+        <label for="keyword">Research keyword:</label>
+        <input
+            id="keyword"
+            name="keyword"
+            value="{{ keyword or '' }}"
+            placeholder="e.g. diabetes prediction"
+            required
+        >
+        <button type="submit">Search Datasets</button>
+    </form>
 
+    {% if datasets %}
+        <h2>Search Results</h2>
+        <ul>
+            {% for dataset in datasets %}
+                <li>
+                    <a href="{{ dataset.url }}" target="_blank"
+                       rel="noopener noreferrer">
+                        {{ dataset.name }}
+                    </a>
+                    &mdash; Downloads: {{ dataset.downloads }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% elif keyword %}
+        <p>No datasets found for "{{ keyword }}". Try another keyword.</p>
+    {% endif %}
+
+    <hr>
+
+    <!-- CSV Upload -->
     <h2>Upload a CSV Dataset</h2>
+
     <form action="/" method="post" enctype="multipart/form-data">
         <input type="file" name="csv_file" accept=".csv" required>
         <button type="submit">Upload CSV</button>
@@ -52,6 +58,7 @@
 
     {% if columns %}
         <p>Rows loaded: {{ row_count }}</p>
+
         <h3>Columns</h3>
         <p>{{ columns | join(", ") }}</p>
 
@@ -75,6 +82,94 @@
             </tbody>
         </table>
     {% endif %}
+
+    <hr>
+
+    <!-- Live Scientific Research -->
+    <h2>Run a Scientific Research Study</h2>
+
+    <p>
+        Enter a research question to retrieve scientific literature,
+        generate a hypothesis, design an experiment, execute it,
+        evaluate the results, and generate a research report.
+    </p>
+
+    <form action="/research" method="post">
+        <label for="research_question">Research question:</label>
+        <br>
+
+        <textarea
+            id="research_question"
+            name="research_question"
+            rows="4"
+            cols="60"
+            maxlength="500"
+            placeholder="e.g. Can machine learning predict student academic performance?"
+            required
+        >{{ research_question or '' }}</textarea>
+
+        <br>
+        <button type="submit">Start Research</button>
+    </form>
+
+    {% if research_result %}
+        <hr>
+        <h2>Research Results</h2>
+
+        {% if research_result.ok %}
+            <h3>Research completed</h3>
+        {% else %}
+            <h3>Research could not be completed</h3>
+            <p>{{ research_result.error }}</p>
+        {% endif %}
+
+        {% if research_result.failure_state %}
+            <p>Failure state: {{ research_result.failure_state }}</p>
+        {% endif %}
+
+        {% if research_result.ingestion %}
+            <h3>Literature Ingestion</h3>
+            <p>
+                Papers fetched:
+                {{ research_result.ingestion.fetched }}
+            </p>
+            <p>
+                Papers after deduplication:
+                {{ research_result.ingestion.after_dedupe }}
+            </p>
+            <p>
+                Chunks indexed:
+                {{ research_result.ingestion.chunks_written }}
+            </p>
+        {% endif %}
+
+        {% if research_result.verdict %}
+            <h3>Statistical Verdict</h3>
+            <p>{{ research_result.verdict }}</p>
+        {% endif %}
+
+        {% if research_result.report %}
+            <h3>Scientific Research Report</h3>
+            <pre style="white-space: pre-wrap;">{{ research_result.report }}</pre>
+        {% endif %}
+
+        {% if research_result.citations %}
+            <h3>References</h3>
+            <ul>
+                {% for key, citation in research_result.citations.items() %}
+                    <li>
+                        <strong>{{ key }}</strong>:
+                        {{ citation }}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% if research_result.results %}
+            <h3>Experiment Results</h3>
+            <pre style="white-space: pre-wrap;">{{ research_result.results | tojson(indent=2) }}</pre>
+        {% endif %}
+    {% endif %}
+
 </body>
 </html>
-```

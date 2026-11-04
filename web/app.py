@@ -1,3 +1,4 @@
+
 from src.experiments.dataset_search import search_datasets
 from pathlib import Path
 
@@ -9,6 +10,19 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Initialize the production research service lazily.
+_research_service = None
+
+
+def get_research_service():
+    global _research_service
+
+    if _research_service is None:
+        from src.workflow.service import ResearchService
+        _research_service = ResearchService()
+
+    return _research_service
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -50,6 +64,7 @@ def home():
         row_count=row_count,
     )
 
+
 @app.route("/search")
 def search():
     keyword = request.args.get("keyword", "").strip()
@@ -63,5 +78,41 @@ def search():
         keyword=keyword,
         datasets=datasets,
     )
+
+
+@app.route("/research", methods=["POST"])
+def research():
+    question = request.form.get("research_question", "").strip()
+
+    if not question:
+        result = {
+            "ok": False,
+            "error": "Please enter a research question.",
+        }
+    elif len(question) > 500:
+        result = {
+            "ok": False,
+            "error": "Research questions must be 500 characters or fewer.",
+        }
+    else:
+        try:
+            service = get_research_service()
+            result = service.run(question)
+        except Exception:
+            result = {
+                "ok": False,
+                "error": (
+                    "Could not initialize the research service. "
+                    "Check the application configuration and logs."
+                ),
+            }
+
+    return render_template(
+        "index.html",
+        research_question=question,
+        research_result=result,
+    )
+
+
 if __name__ == "__main__":
     app.run(debug=True)
