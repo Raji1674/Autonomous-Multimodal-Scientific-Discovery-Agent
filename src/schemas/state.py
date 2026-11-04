@@ -46,3 +46,6 @@ class ResearchState(TypedDict, total=False):
     dataset_path: str
     dataset_validation: dict
     dataset_metadata: dict
+    task_override: str
+    detected_task: str
+    task_detection: dict

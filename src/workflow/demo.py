@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-
+from src.agents.csv_experiment_agent import CSVExperimentAgent
 from src.agents.statistical_critic import StatisticalCriticAgent
 from src.agents.code_executor import CodeExecutor
 from src.agents.experiment_designer import ExperimentDesigner

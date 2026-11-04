@@ -1,14 +1,12 @@
-
 from pathlib import Path
-
 import pandas as pd
 
 
 def validate_csv_dataset(
     file_path: str | Path,
-    target_column: str,
+    target_column: str | None = None,
 ) -> dict:
-    """Validate a CSV dataset before a classification experiment."""
+    """Validate CSV datasets for supervised and unsupervised ML."""
 
     path = Path(file_path)
 
@@ -34,43 +32,53 @@ def validate_csv_dataset(
     if not df.columns.is_unique:
         issues.append("Duplicate column names found")
 
-    if target_column not in df.columns:
-        issues.append(f"Target column {target_column!r} not found")
-
     missing_values = int(df.isna().sum().sum())
     missing_feature_values = 0
     missing_target_values = 0
+    target_classes = None
 
-    if target_column in df.columns:
-        features = df.drop(columns=[target_column])
-        target = df[target_column]
+    if target_column is not None:
+        if target_column not in df.columns:
+            issues.append(f"Target column {target_column!r} not found")
+        else:
+            features = df.drop(columns=[target_column])
+            target = df[target_column]
 
-        missing_feature_values = int(features.isna().sum().sum())
-        missing_target_values = int(target.isna().sum())
+            missing_feature_values = int(features.isna().sum().sum())
+            missing_target_values = int(target.isna().sum())
 
-        # Missing feature values can be handled by preprocessing.
-        all_null_features = features.columns[features.isna().all()].tolist()
+            all_null_features = features.columns[
+                features.isna().all()
+            ].tolist()
 
-        if all_null_features:
+            if all_null_features:
+                issues.append(
+                    f"Features contain only missing values: {all_null_features}"
+                )
+
+            labelled_target = target.dropna()
+            target_classes = int(labelled_target.nunique())
+
+            if target_classes < 2:
+                issues.append(
+                    "Target must contain at least two classes after removing missing labels"
+                )
+
+            if target_classes > 50:
+                issues.append(
+                    "Target has more than 50 unique values; "
+                    "check whether this is a classification task"
+                )
+    else:
+        all_null_columns = df.columns[df.isna().all()].tolist()
+        if all_null_columns:
             issues.append(
-                f"Features contain only missing values: {all_null_features}"
+                f"Columns contain only missing values: {all_null_columns}"
             )
 
-        # Missing target rows must be removed before training.
-        labelled_target = target.dropna()
+    duplicate_rows = int(df.duplicated().sum())
 
-        if labelled_target.nunique() < 2:
-            issues.append(
-                "Target must contain at least two classes after removing missing labels"
-            )
-
-        if labelled_target.nunique() > 50:
-            issues.append(
-                "Target has more than 50 unique values; "
-                "check whether this is a classification task"
-            )
-
-    if df.duplicated().any():
+    if duplicate_rows:
         issues.append("Duplicate rows found")
 
     return {
@@ -79,14 +87,10 @@ def validate_csv_dataset(
         "columns": len(df.columns),
         "column_names": df.columns.tolist(),
         "target_column": target_column,
-        "target_classes": (
-            int(df[target_column].nunique(dropna=True))
-            if target_column in df.columns
-            else None
-        ),
+        "target_classes": target_classes,
         "missing_values": missing_values,
         "missing_feature_values": missing_feature_values,
         "missing_target_values": missing_target_values,
-        "duplicate_rows": int(df.duplicated().sum()),
+        "duplicate_rows": duplicate_rows,
         "issues": issues,
     }

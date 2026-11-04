@@ -38,14 +38,7 @@ def dataset_discovery_node(state: dict) -> dict:
 
     target_column = state.get("target_column")
 
-    if not target_column:
-        return {
-            "failure_state": "DATASET_DISCOVERY_FAILED",
-            "error": (
-                "Target column is not specified. "
-                "Automatic target selection is not enabled."
-            ),
-        }
+  
 
     candidates = search_datasets(keyword, limit=10)
 

@@ -61,13 +61,20 @@ def test_discovery_downloads_and_validates_dataset(monkeypatch, tmp_path):
     assert result["dataset_path"].endswith("test__sample__sample.csv")
 
 
-def test_discovery_rejects_missing_target_column():
+def test_discovery_allows_missing_target_column(monkeypatch):
+    monkeypatch.setattr(
+        dataset_discovery,
+        "search_datasets",
+        lambda keyword, limit=10: [],
+    )
+
     result = dataset_discovery.dataset_discovery_node({
         "research_question": "Study a classification problem"
     })
 
     assert result["failure_state"] == "DATASET_DISCOVERY_FAILED"
-    assert "Target column" in result["error"]
+    assert "Target column" not in result["error"]
+    assert "No Hugging Face datasets were found" in result["error"]
 
 
 def test_discovery_handles_no_datasets(monkeypatch):

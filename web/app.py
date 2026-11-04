@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.utils import secure_filename
-
+from src.agents.csv_experiment_agent import CSVExperimentAgent
 from src.experiments.dataset_search import search_datasets
 from src.experiments.csv_trainer import train_csv_dataset
 from src.experiments.csv_critic import evaluate_csv_with_critic
@@ -196,6 +196,42 @@ def evaluate():
     except Exception:
         return render_dashboard(
             message="An error occurred during evaluation. Check the dataset."
+        )
+
+@app.route("/experiment", methods=["POST"])
+def experiment():
+    file_path = get_uploaded_file()
+    target_column = request.form.get("target_column", "").strip()
+    task_override = request.form.get("task_override", "").strip() or None
+
+    if file_path is None:
+        return render_dashboard(message="Upload a CSV dataset first.")
+
+    try:
+        agent = CSVExperimentAgent()
+
+        state = {
+            "dataset_path": str(file_path),
+            "target_column": target_column or None,
+            "task_override": task_override,
+            "selected_hypothesis": {
+                "statement": "Evaluate the selected dataset using an appropriate ML task."
+            },
+        }
+
+        result = agent.run(state)
+
+        return render_dashboard(
+            message="Experiment completed."
+            if not result.get("failure_state")
+            else result.get("error", "Experiment failed."),
+            evaluation_result=result,
+        )
+
+    except Exception as exc:
+        app.logger.exception("CSV experiment failed")
+        return render_dashboard(
+            message=f"Experiment failed: {exc}"
         )
 
 

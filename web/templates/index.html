@@ -4,315 +4,988 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Autonomous Scientific Discovery Agent</title>
+    <title>Scientific Discovery Workspace</title>
+
     <style>
+        :root {
+            --bg: #f5f7fb;
+            --surface: #ffffff;
+            --sidebar: #17243a;
+            --primary: #4169a8;
+            --primary-dark: #315486;
+            --text: #202b3c;
+            --muted: #718096;
+            --border: #e5eaf1;
+            --success: #18845b;
+            --danger: #bd4242;
+            --shadow: 0 3px 14px rgba(30, 50, 80, .045);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background: #f4f6f9;
-            color: #263238;
             margin: 0;
-            padding: 30px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            font-size: 14px;
         }
-        main {
-            max-width: 1050px;
-            margin: auto;
+
+        button, input, select {
+            font: inherit;
         }
-        section {
-            background: white;
-            padding: 22px;
-            margin: 20px 0;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px #00000012;
+
+        .layout {
+            min-height: 100vh;
         }
-        input, select, button {
-            padding: 10px;
-            margin: 6px 4px;
-        }
-        button {
-            background: #2457a7;
+
+        .sidebar {
+            position: fixed;
+            inset: 0 auto 0 0;
+            width: 245px;
+            padding: 28px 18px;
+            background: var(--sidebar);
             color: white;
-            border: 0;
-            border-radius: 5px;
-            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            z-index: 5;
         }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-top: 12px;
-            display: block;
-            overflow-x: auto;
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 10px 32px;
         }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 9px;
-            text-align: left;
+
+        .brand-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: #354f76;
+            font-size: 20px;
         }
-        th {
-            background: #edf1f7;
+
+        .brand-name {
+            font-size: 15px;
+            font-weight: 650;
+            line-height: 1.4;
         }
-        .message {
+
+        .brand-subtitle {
+            color: #aab8cb;
+            font-size: 11px;
+            margin-top: 3px;
+        }
+
+        .nav-label {
+            padding: 0 12px;
+            color: #8494aa;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            margin: 8px 0 12px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             padding: 12px;
-            background: #e8f1ff;
-            border-radius: 6px;
+            margin: 3px 0;
+            border-radius: 7px;
+            text-decoration: none;
+            color: #c5d0df;
+            font-size: 13px;
+            transition: background .2s;
         }
-        .verdict {
-            font-size: 22px;
-            font-weight: bold;
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: #293d5a;
+            color: white;
+        }
+
+        .nav-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .sidebar-bottom {
+            margin-top: auto;
+            padding: 15px 12px;
+            border-top: 1px solid #34445b;
+            color: #aab8cb;
+            font-size: 11px;
+            line-height: 1.7;
+        }
+
+        .main {
+            margin-left: 245px;
+            padding: 30px 38px 50px;
+            max-width: 1600px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .eyebrow {
+            color: var(--primary);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.1px;
             text-transform: uppercase;
+            margin-bottom: 8px;
         }
-        .metric {
-            display: inline-block;
-            background: #edf3fa;
-            padding: 12px;
-            margin: 5px;
+
+        h1 {
+            margin: 0;
+            font-size: 25px;
+            letter-spacing: -.5px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            margin: 8px 0 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 12px;
+            background: #e8f5ee;
+            color: #24744f;
+            border-radius: 20px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            background: #269766;
+            border-radius: 50%;
+        }
+
+        .welcome {
+            background: #eaf0f8;
+            border: 1px solid #dce6f2;
+            border-radius: 10px;
+            padding: 22px 24px;
+            margin-bottom: 25px;
+        }
+
+        .welcome h2 {
+            margin: 0 0 7px;
+            font-size: 17px;
+        }
+
+        .welcome p {
+            margin: 0;
+            color: #5e6d81;
+            line-height: 1.6;
+        }
+
+        .section-heading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 32px 0 15px;
+        }
+
+        .section-number {
+            width: 27px;
+            height: 27px;
+            display: grid;
+            place-items: center;
+            border-radius: 7px;
+            background: #e7eef8;
+            color: var(--primary);
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .section-heading h2 {
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .section-description {
+            margin: -6px 0 16px 37px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 23px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow);
+        }
+
+        .panel h3 {
+            font-size: 14px;
+            margin: 0 0 16px;
+        }
+
+        .form-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        label {
+            color: #536174;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="file"],
+        select {
+            border: 1px solid #dce3ed;
+            background: #fff;
+            color: var(--text);
             border-radius: 6px;
+            padding: 10px 12px;
+            outline: none;
+            min-height: 39px;
         }
+
+        input:focus, select:focus {
+            border-color: #7193c3;
+            box-shadow: 0 0 0 3px #4169a815;
+        }
+
+        input[type="file"] {
+            max-width: 100%;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border: 0;
+            border-radius: 6px;
+            padding: 10px 16px;
+            min-height: 39px;
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            text-decoration: none;
+            transition: background .2s;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: #eaf0f8;
+            color: #315486;
+        }
+
+        .btn-secondary:hover {
+            background: #dce7f5;
+        }
+
+        .message {
+            background: #eaf2fc;
+            border: 1px solid #d6e5f7;
+            color: #315486;
+            padding: 13px 16px;
+            border-radius: 7px;
+            margin-bottom: 20px;
+        }
+
+        .dataset-list {
+            margin-top: 20px;
+            padding: 0;
+            list-style: none;
+        }
+
+        .dataset-list li {
+            padding: 13px 0;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .dataset-list a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .dataset-list a:hover {
+            text-decoration: underline;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .info-card {
+            background: #f7f9fc;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 0;
+        }
+
+        .info-label {
+            color: var(--muted);
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        .info-value {
+            font-size: 20px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 16px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+        }
+
+        table {
+            width: 100%;
+            min-width: 500px;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th, td {
+            padding: 11px 13px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f3f6fa;
+            color: #536174;
+            font-weight: 650;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .result-title {
+            margin: 22px 0 12px;
+            font-size: 14px;
+        }
+
+        .verdict {
+            font-size: 21px;
+            font-weight: 750;
+            text-transform: uppercase;
+            color: var(--primary);
+            margin: 8px 0 15px;
+        }
+
+        .issue-list {
+            padding-left: 20px;
+            color: #536174;
+            line-height: 1.8;
+        }
+
         .error {
-            color: #b42318;
+            color: var(--danger);
+        }
+
+        .success-text {
+            color: var(--success);
+        }
+
+        .note {
+            background: #f7f9fc;
+            border-left: 3px solid #8aa5ca;
+            padding: 12px 15px;
+            color: #637186;
+            line-height: 1.6;
+            font-size: 12px;
+            margin-top: 18px;
+        }
+
+        .footer {
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+            padding-top: 18px;
+            color: var(--muted);
+            font-size: 11px;
+            text-align: center;
+        }
+
+        @media (max-width: 850px) {
+            .sidebar {
+                position: static;
+                width: 100%;
+                padding: 15px;
+            }
+
+            .brand {
+                padding-bottom: 14px;
+            }
+
+            .sidebar nav {
+                display: flex;
+                overflow-x: auto;
+            }
+
+            .nav-label, .sidebar-bottom {
+                display: none;
+            }
+
+            .nav-link {
+                white-space: nowrap;
+            }
+
+            .main {
+                margin-left: 0;
+                padding: 23px 18px 35px;
+            }
+        }
+
+        @media (max-width: 550px) {
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            h1 {
+                font-size: 21px;
+            }
+
+            .info-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .panel {
+                padding: 17px;
+            }
+
+            .form-row {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .form-row input,
+            .form-row select,
+            .form-row button {
+                width: 100%;
+            }
         }
     </style>
 </head>
+
 <body>
-<main>
-    <h1>Autonomous Multimodal Scientific Discovery Agent</h1>
-    <p>Discover datasets, validate data, run experiments and evaluate results.</p>
+<div class="layout">
 
-    {% if message %}
-        <p class="message">{{ message }}</p>
-    {% endif %}
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon">⌘</div>
+            <div>
+                <div class="brand-name">Scientific Discovery</div>
+                <div class="brand-subtitle">Research Workspace</div>
+            </div>
+        </div>
 
-    <section>
-        <h2>1. Search Public Datasets</h2>
-        <form action="/search" method="get">
-            <input
-                name="keyword"
-                value="{{ keyword or '' }}"
-                placeholder="e.g. diabetes prediction"
-                required
-            >
-            <button type="submit">Search Datasets</button>
-        </form>
+        <div class="nav-label">WORKSPACE</div>
 
-        {% if datasets %}
-            <ul>
-                {% for dataset in datasets %}
-                    <li>
-                        <a href="{{ dataset.url }}" target="_blank"
-                           rel="noopener noreferrer">
-                            {{ dataset.name }}
-                        </a>
-                        — Downloads: {{ dataset.downloads }}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% elif keyword %}
-            <p>No datasets found. Try another keyword.</p>
+        <nav>
+            <a class="nav-link active" href="#overview">
+                <span class="nav-icon">⌂</span> Overview
+            </a>
+            <a class="nav-link" href="#dataset-search">
+                <span class="nav-icon">⌕</span> Dataset Search
+            </a>
+            <a class="nav-link" href="#upload">
+                <span class="nav-icon">⇧</span> Upload Dataset
+            </a>
+            <a class="nav-link" href="#training">
+                <span class="nav-icon">▦</span> Model Training
+            </a>
+            <a class="nav-link" href="#experiments">
+                <span class="nav-icon">◈</span> Experiments
+            </a>
+        </nav>
+
+        <div class="sidebar-bottom">
+            Autonomous Multimodal<br>
+            Scientific Discovery Agent<br>
+            <span>Machine Learning Workspace</span>
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <header class="topbar" id="overview">
+            <div>
+                <div class="eyebrow">Research and experimentation</div>
+                <h1>Scientific Discovery Workspace</h1>
+                <p class="subtitle">
+                    Explore datasets, train models and evaluate experimental results.
+                </p>
+            </div>
+            <div class="status">
+                <span class="status-dot"></span>
+                Workspace ready
+            </div>
+        </header>
+
+        <div class="welcome">
+            <h2>Welcome to your research workspace</h2>
+            <p>
+                Use the tools below to find public datasets, validate uploaded
+                data, train machine learning models and review statistical results.
+            </p>
+        </div>
+
+        {% if message %}
+            <div class="message" role="status">{{ message }}</div>
         {% endif %}
-    </section>
 
-    <section>
-        <h2>2. Upload CSV Dataset</h2>
-        <form action="/" method="post" enctype="multipart/form-data">
-            <input type="file" name="csv_file" accept=".csv" required>
-            <button type="submit">Upload CSV</button>
-        </form>
-
-        {% if columns %}
-            <p><strong>Total rows:</strong> {{ row_count if row_count is not none else "See uploaded dataset" }}</p>
-            <p><strong>Columns:</strong> {{ columns | join(", ") }}</p>
-
-            <h3>Dataset Preview (First 5 Rows)</h3>
-            <table>
-                <thead>
-                    <tr>
-                        {% for column in columns %}
-                            <th>{{ column }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in preview %}
-                        <tr>
-                            {% for column in columns %}
-                                <td>{{ row[column] }}</td>
-                            {% endfor %}
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% endif %}
-    </section>
-
-    {% if uploaded and columns %}
-    <section>
-        <h2>3. Select Target and Train Model</h2>
-        <form action="/train" method="post">
-            <label for="train_target">Target column:</label>
-            <select id="train_target" name="target_column" required>
-                {% for column in columns %}
-                    <option value="{{ column }}">{{ column }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit">Train Random Forest</button>
-        </form>
-
-        {% if train_result %}
-            {% if train_result.success %}
-                <h3>Training Results</h3>
-                <div class="metric">
-                    Accuracy: {{ "%.4f"|format(train_result.accuracy) }}
-                </div>
-                <div class="metric">
-                    Macro F1: {{ "%.4f"|format(train_result.f1_macro) }}
-                </div>
-                <div class="metric">
-                    Training rows: {{ train_result.train_rows }}
-                </div>
-                <div class="metric">
-                    Testing rows: {{ train_result.test_rows }}
-                </div>
-                <p>Model: {{ train_result.model }}</p>
-            {% else %}
-                <h3 class="error">Training Issues</h3>
-                <ul>
-                    {% for issue in train_result.issues %}
-                        <li>{{ issue }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        {% endif %}
-    </section>
-
-    <section>
-        <h2>4. Run Experiment and Statistical Critic</h2>
-        <p>
-            Compare two Random Forest configurations using paired,
-            reproducible train/test splits.
+        <!-- DATASET SEARCH -->
+        <div class="section-heading" id="dataset-search">
+            <span class="section-number">01</span>
+            <h2>Search Public Datasets</h2>
+        </div>
+        <p class="section-description">
+            Find publicly available datasets related to your research topic.
         </p>
 
-        <form action="/evaluate" method="post">
-            <label for="eval_target">Target column:</label>
-            <select id="eval_target" name="target_column" required>
+        <section class="panel">
+            <form action="/search" method="get" class="form-row">
+                <input
+                    class="search-input"
+                    type="text"
+                    name="keyword"
+                    value="{{ keyword or '' }}"
+                    placeholder="Example: diabetes prediction"
+                    required
+                >
+                <button class="btn" type="submit">⌕ Search Datasets</button>
+            </form>
+
+            {% if datasets %}
+                <h3 class="result-title">Search Results</h3>
+                <ul class="dataset-list">
+                    {% for dataset in datasets %}
+                        <li>
+                            <a href="{{ dataset.url }}" target="_blank"
+                               rel="noopener noreferrer">
+                                {{ dataset.name }}
+                            </a>
+                            <span class="muted">
+                                Downloads: {{ dataset.downloads }}
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% elif keyword %}
+                <p class="muted">No datasets found. Try another keyword.</p>
+            {% endif %}
+        </section>
+
+        <!-- CSV UPLOAD -->
+        <div class="section-heading" id="upload">
+            <span class="section-number">02</span>
+            <h2>Upload CSV Dataset</h2>
+        </div>
+        <p class="section-description">
+            Upload your dataset to inspect its structure before training.
+        </p>
+
+        <section class="panel">
+            <form action="/" method="post" enctype="multipart/form-data">
+                <div class="field">
+                    <label for="csv_file">Choose CSV file</label>
+                    <input
+                        id="csv_file"
+                        type="file"
+                        name="csv_file"
+                        accept=".csv"
+                        required
+                    >
+                </div>
+                <button class="btn" type="submit">⇧ Upload Dataset</button>
+                <p class="muted">CSV format only · Maximum file size: 16 MB</p>
+            </form>
+
+            {% if columns %}
+                <h3 class="result-title">Dataset Information</h3>
+
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Total Rows</div>
+                        <div class="info-value">
+                            {{ row_count if row_count is not none else "—" }}
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Total Columns</div>
+                        <div class="info-value">{{ columns|length }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Dataset Status</div>
+                        <div class="info-value success-text">Uploaded</div>
+                    </div>
+                </div>
+
+                <p class="muted">
+                    <strong>Columns:</strong> {{ columns | join(", ") }}
+                </p>
+
+                <h3 class="result-title">Dataset Preview · First 5 Rows</h3>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                {% for column in columns %}
+                                    <th>{{ column }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in preview %}
+                                <tr>
+                                    {% for column in columns %}
+                                        <td>{{ row[column] }}</td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        </section>
+
+        {% if uploaded and columns %}
+
+      <!-- ML EXPERIMENT -->
+<div class="section-heading" id="training">
+    <span class="section-number">03</span>
+    <h2>Machine Learning Experiments</h2>
+</div>
+
+<p class="section-description">
+    Automatically identify the ML task and select a suitable experiment.
+</p>
+
+<section class="panel">
+    <form action="{{ url_for('experiment') }}" method="POST">
+
+        <div class="field">
+            <label for="experiment_target">Target Column</label>
+            <select name="target_column" id="experiment_target">
+                <option value="">No target (Clustering)</option>
                 {% for column in columns %}
                     <option value="{{ column }}">{{ column }}</option>
                 {% endfor %}
             </select>
+        </div>
 
-            <p>
-                <label for="n_seeds">Number of paired runs:</label>
-                <input id="n_seeds" name="n_seeds"
-                       type="number" min="2" max="100" value="20">
-            </p>
+        <div class="field">
+            <label for="task_override">Machine Learning Task</label>
+            <select name="task_override" id="task_override">
+                <option value="">Auto Detect</option>
+                <option value="classification">Classification</option>
+                <option value="regression">Regression</option>
+                <option value="clustering">Clustering</option>
+            </select>
+        </div>
 
-            <p>
-                <label for="test_size">Test size:</label>
-                <input id="test_size" name="test_size"
-                       type="number" min="0.1" max="0.5"
-                       step="0.05" value="0.2">
-            </p>
+        <button class="btn" type="submit">
+            Run ML Experiment
+        </button>
+    </form>
+</section>
 
-            <p>
-                <label for="direction">Expected direction:</label>
-                <select id="direction" name="expected_direction">
-                    <option value="higher">Higher score is better</option>
-                    <option value="lower">Lower score is better</option>
-                </select>
-            </p>
+            {% if train_result %}
+                {% if train_result.success %}
+                    <h3 class="result-title">Training Results</h3>
 
-            <button type="submit">Run Experiment and Critic</button>
-        </form>
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="info-label">Accuracy</div>
+                            <div class="info-value">
+                                {{ "%.4f"|format(train_result.accuracy) }}
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Macro F1 Score</div>
+                            <div class="info-value">
+                                {{ "%.4f"|format(train_result.f1_macro) }}
+                            </div>
+                        </div>
+                        <div class="info-card">
+                            <div class="info-label">Model</div>
+                            <div class="info-value" style="font-size:15px">
+                                {{ train_result.model }}
+                            </div>
+                        </div>
+                    </div>
 
-        {% if evaluation_result %}
-            {% if evaluation_result.success %}
-                {% set exp = evaluation_result.experiment %}
-                {% set critic = evaluation_result.critic %}
-                {% set analysis = critic.analysis %}
-
-                <h3>Experiment Results</h3>
-                <div class="metric">
-                    Baseline mean:
-                    {{ "%.4f"|format(analysis.baseline.mean) }}
-                </div>
-                <div class="metric">
-                    Treatment mean:
-                    {{ "%.4f"|format(analysis.treatment.mean) }}
-                </div>
-                <div class="metric">
-                    Mean difference:
-                    {{ "%.4f"|format(analysis.mean_diff) }}
-                </div>
-                <div class="metric">
-                    Paired runs: {{ analysis.n }}
-                </div>
-
-                <h3>Statistical Critic Verdict</h3>
-                <p class="verdict">{{ critic.verdict }}</p>
-
-                <div class="metric">
-                    Statistical quality:
-                    {{ critic.statistical_quality }}/10
-                </div>
-                <div class="metric">
-                    Test: {{ analysis.test }}
-                </div>
-                <div class="metric">
-                    P-value:
-                    {{ analysis.p if analysis.p is not none else "Unavailable" }}
-                </div>
-                <div class="metric">
-                    Adjusted p-value:
-                    {{ analysis.p_adjusted if analysis.p_adjusted is not none else "Unavailable" }}
-                </div>
-                <div class="metric">
-                    Effect size:
-                    {{ analysis.effect_size if analysis.effect_size is not none else "Unavailable" }}
-                </div>
-
-                {% if analysis.ci %}
-                    <p>
-                        <strong>Confidence interval:</strong>
-                        {{ analysis.ci[0] }} to {{ analysis.ci[1] }}
+                    <p class="muted">
+                        Training rows: {{ train_result.train_rows }}
+                        &nbsp; | &nbsp;
+                        Testing rows: {{ train_result.test_rows }}
                     </p>
-                {% endif %}
-
-                <h4>Critic Reasons</h4>
-                <ul>
-                    {% for reason in critic.reasons %}
-                        <li>{{ reason }}</li>
-                    {% endfor %}
-                </ul>
-
-                <h4>Quality Issues</h4>
-                {% if critic.issues %}
-                    <ul>
-                        {% for issue in critic.issues %}
-                            <li>
-                                <strong>{{ issue.severity }}:</strong>
-                                {{ issue.message }}
-                            </li>
+                {% else %}
+                    <h3 class="error">Training Issues</h3>
+                    <ul class="issue-list">
+                        {% for issue in train_result.issues %}
+                            <li>{{ issue }}</li>
                         {% endfor %}
                     </ul>
-                {% else %}
-                    <p>No quality issues reported.</p>
                 {% endif %}
-
-                <p>
-                    <strong>Interpretation:</strong>
-                    Accept means the pre-set statistical criteria were met.
-                    It does not prove that the hypothesis is scientifically true.
-                </p>
-            {% else %}
-                <h3 class="error">Evaluation Issues</h3>
-                <p>Stage: {{ evaluation_result.stage }}</p>
-                <ul>
-                    {% for issue in evaluation_result.issues %}
-                        <li>{{ issue }}</li>
-                    {% endfor %}
-                </ul>
             {% endif %}
+        </section>
+
+        <!-- EXPERIMENT AND CRITIC -->
+        <div class="section-heading" id="experiments">
+            <span class="section-number">04</span>
+            <h2>Experiment & Statistical Critic</h2>
+        </div>
+        <p class="section-description">
+            Compare model configurations using paired and reproducible experiments.
+        </p>
+
+        <section class="panel">
+            <h3>Experiment Configuration</h3>
+
+            <form action="/evaluate" method="post">
+                <div class="field">
+                    <label for="eval_target">Target Column</label>
+                    <select id="eval_target" name="target_column" required>
+                        {% for column in columns %}
+                            <option value="{{ column }}">{{ column }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="info-grid">
+                    <div class="field">
+                        <label for="n_seeds">Number of Paired Runs</label>
+                        <input
+                            id="n_seeds"
+                            name="n_seeds"
+                            type="number"
+                            min="2"
+                            max="100"
+                            value="20"
+                        >
+                    </div>
+
+                    <div class="field">
+                        <label for="test_size">Test Size</label>
+                        <input
+                            id="test_size"
+                            name="test_size"
+                            type="number"
+                            min="0.1"
+                            max="0.5"
+                            step="0.05"
+                            value="0.2"
+                        >
+                    </div>
+
+                    <div class="field">
+                        <label for="direction">Expected Direction</label>
+                        <select id="direction" name="expected_direction">
+                            <option value="higher">Higher is better</option>
+                            <option value="lower">Lower is better</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn" type="submit">▶ Run Experiment & Critic</button>
+            </form>
+
+            {% if evaluation_result %}
+                {% if evaluation_result.success %}
+                    {% set exp = evaluation_result.experiment %}
+                    {% set critic = evaluation_result.critic %}
+                    {% set analysis = critic.analysis %}
+
+                    <h3 class="result-title">Experiment Results</h3>
+
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="info-label">Baseline Mean</div>
+                            <div class="info-value">
+                                {{ "%.4f"|format(analysis.baseline.mean) }}
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">Treatment Mean</div>
+                            <div class="info-value">
+                                {{ "%.4f"|format(analysis.treatment.mean) }}
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">Mean Difference</div>
+                            <div class="info-value">
+                                {{ "%.4f"|format(analysis.mean_diff) }}
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">Paired Runs</div>
+                            <div class="info-value">{{ analysis.n }}</div>
+                        </div>
+                    </div>
+
+                    <h3 class="result-title">Statistical Critic Verdict</h3>
+                    <p class="verdict">{{ critic.verdict }}</p>
+
+                    <div class="info-grid">
+                        <div class="info-card">
+                            <div class="info-label">Statistical Quality</div>
+                            <div class="info-value">
+                                {{ critic.statistical_quality }}/10
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">Statistical Test</div>
+                            <div class="info-value" style="font-size:15px">
+                                {{ analysis.test }}
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">P-value</div>
+                            <div class="info-value" style="font-size:15px">
+                                {{ analysis.p if analysis.p is not none else "Unavailable" }}
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">Adjusted P-value</div>
+                            <div class="info-value" style="font-size:15px">
+                                {{ analysis.p_adjusted if analysis.p_adjusted is not none else "Unavailable" }}
+                            </div>
+                        </div>
+
+                        <div class="info-card">
+                            <div class="info-label">Effect Size</div>
+                            <div class="info-value" style="font-size:15px">
+                                {{ analysis.effect_size if analysis.effect_size is not none else "Unavailable" }}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if analysis.ci %}
+                        <p>
+                            <strong>Confidence Interval:</strong>
+                            {{ analysis.ci[0] }} to {{ analysis.ci[1] }}
+                        </p>
+                    {% endif %}
+
+                    <h3 class="result-title">Critic Reasons</h3>
+                    <ul class="issue-list">
+                        {% for reason in critic.reasons %}
+                            <li>{{ reason }}</li>
+                        {% endfor %}
+                    </ul>
+
+                    <h3 class="result-title">Quality Issues</h3>
+                    {% if critic.issues %}
+                        <ul class="issue-list">
+                            {% for issue in critic.issues %}
+                                <li>
+                                    <strong>{{ issue.severity }}:</strong>
+                                    {{ issue.message }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="success-text">No quality issues reported.</p>
+                    {% endif %}
+
+                    <div class="note">
+                        <strong>Interpretation:</strong>
+                        Accept means the pre-set statistical criteria were met.
+                        It does not prove that the hypothesis is scientifically true.
+                    </div>
+
+                {% else %}
+                    <h3 class="error">Evaluation Issues</h3>
+                    <p>Stage: {{ evaluation_result.stage }}</p>
+                    <ul class="issue-list">
+                        {% for issue in evaluation_result.issues %}
+                            <li>{{ issue }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            {% endif %}
+        </section>
         {% endif %}
-    </section>
-    {% endif %}
-</main>
+
+        <footer class="footer">
+            Autonomous Multimodal Scientific Discovery Agent
+            <br>
+            Research · Dataset Validation · Machine Learning · Statistical Evaluation
+        </footer>
+
+    </main>
+</div>
 </body>
 </html>
