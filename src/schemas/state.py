@@ -1,0 +1,42 @@
+"""Workflow state and failure enum.
+
+State values are plain dicts/strings (not pydantic objects) so the LangGraph
+SQLite checkpointer can serialize them reliably.
+"""
+from __future__ import annotations
+
+from enum import Enum
+from typing import TypedDict
+
+
+class FailureState(str, Enum):
+    LITERATURE_SEARCH_FAILED = "LITERATURE_SEARCH_FAILED"
+    PAPER_PARSE_FAILED = "PAPER_PARSE_FAILED"
+    EMBEDDING_FAILED = "EMBEDDING_FAILED"
+    RETRIEVAL_FAILED = "RETRIEVAL_FAILED"
+    HYPOTHESIS_FAILED = "HYPOTHESIS_FAILED"
+    CODE_GENERATION_FAILED = "CODE_GENERATION_FAILED"
+    SANDBOX_REJECTED = "SANDBOX_REJECTED"
+    EXECUTION_FAILED = "EXECUTION_FAILED"
+    STATISTICAL_ANALYSIS_FAILED = "STATISTICAL_ANALYSIS_FAILED"
+    SYNTHESIS_FAILED = "SYNTHESIS_FAILED"
+
+
+class ResearchState(TypedDict, total=False):
+    run_id: str
+    research_question: str
+    literature: list[dict]  # ScoredChunk.model_dump() items
+    literature_summary: str
+    citations: dict[str, dict]  # citation_key -> paper info
+    hypotheses: list[dict]
+    selected_hypothesis: dict
+    generated_code: dict
+    experiment_plan: dict
+    experiment_results: dict
+    statistical_results: dict
+    critic_feedback: dict
+    verdict: str
+    failure_state: str | None
+    error: str | None
+    costs: dict
+    final_report: str
