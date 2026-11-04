@@ -1,5 +1,5 @@
 # provider: gemini | groq | openrouter
 # model: check the provider's CURRENT model list before setting (names change often)
 provider: gemini
-model: set-me
+model: gemini-3.5-flash-lite
 temperature: 0.2
