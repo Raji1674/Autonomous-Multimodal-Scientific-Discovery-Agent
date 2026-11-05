@@ -5,7 +5,6 @@ from src.experiments.dataset_validator import validate_csv_dataset
 import pandas as pd
 from flask import Flask, render_template, request
 import uuid
-from src.experiments.dataset_validator import validate_csv_dataset
 
 app = Flask(__name__, template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -34,6 +33,8 @@ def home():
     preview = []
     row_count = None
     upload_id = None
+    validated_upload_id = None
+    validated_target_column = None
 
     if request.method == "POST":
         submitted_upload_id = request.form.get("upload_id", "").strip()
@@ -67,6 +68,10 @@ def home():
                     if validation.get("valid"):
                         df = pd.read_csv(saved_path, nrows=5)
                         preview = df.fillna("").to_dict("records")
+
+                        validated_upload_id = submitted_upload_id
+                        validated_target_column = target_column
+
                         message = (
                             f"Dataset validated successfully. "
                             f"Target column: {target_column}"
@@ -115,6 +120,8 @@ def home():
         preview=preview,
         upload_id=upload_id,
         row_count=row_count,
+        validated_upload_id=validated_upload_id,
+        validated_target_column=validated_target_column,
     )
 
 
@@ -136,36 +143,88 @@ def search():
 @app.route("/research", methods=["POST"])
 def research():
     question = request.form.get("research_question", "").strip()
+    upload_id = request.form.get("upload_id", "").strip()
+    target_column = request.form.get("target_column", "").strip()
+
+    result = {"ok": False}
 
     if not question:
         result = {
             "ok": False,
-            "error": "Please enter a research question.",
+            "error": "Please enter a research question."
         }
+
     elif len(question) > 500:
         result = {
             "ok": False,
-            "error": "Research questions must be 500 characters or fewer.",
+            "error": "Research questions must be 500 characters or fewer."
         }
+
+    elif bool(upload_id) != bool(target_column):
+        result = {
+            "ok": False,
+            "error": "Invalid dataset reference. Please validate your CSV again."
+        }
+
     else:
         try:
             service = get_research_service()
-            result = service.run(question)
+
+            if upload_id:
+                try:
+                    parsed_id = uuid.UUID(hex=upload_id)
+                    if parsed_id.hex != upload_id:
+                        raise ValueError("Invalid upload ID")
+                except ValueError:
+                    result = {
+                        "ok": False,
+                        "error": "Invalid dataset reference."
+                    }
+                else:
+                    saved_path = UPLOAD_DIR / f"{upload_id}.csv"
+
+                    if not saved_path.is_file():
+                        result = {
+                            "ok": False,
+                            "error": "Uploaded CSV not found. Please upload it again."
+                        }
+                    else:
+                        validation = validate_csv_dataset(
+                            saved_path,
+                            target_column
+                        )
+
+                        if not validation.get("valid"):
+                            result = {
+                                "ok": False,
+                                "error": "Dataset validation failed: "
+                                + "; ".join(validation.get("issues", []))
+                            }
+                        else:
+                            result = service.run(
+                                question,
+                                dataset_path=str(saved_path),
+                                target_column=target_column
+                            )
+            else:
+                result = service.run(question)
+
         except Exception:
             result = {
                 "ok": False,
                 "error": (
-                    "Could not initialize the research service. "
+                    "Research execution failed. "
                     "Check the application configuration and logs."
-                ),
+                )
             }
 
     return render_template(
         "index.html",
         research_question=question,
         research_result=result,
+        validated_upload_id=upload_id if result.get("ok") else None,
+        validated_target_column=target_column if result.get("ok") else None,
     )
-
 
 if __name__ == "__main__":
     app.run(debug=True)

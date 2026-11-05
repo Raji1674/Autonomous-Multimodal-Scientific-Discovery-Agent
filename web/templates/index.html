@@ -110,6 +110,13 @@
     </p>
 
     <form action="/research" method="post">
+
+        {% if validated_upload_id and validated_target_column %}
+            <input type="hidden" name="upload_id" value="{{ validated_upload_id }}">
+            <input type="hidden" name="target_column" value="{{ validated_target_column }}">
+            <p>Using validated CSV dataset. Target: {{ validated_target_column }}</p>
+        {% endif %}
+
         <label for="research_question">Research question:</label>
         <br>
 
