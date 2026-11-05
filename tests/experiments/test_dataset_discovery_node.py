@@ -91,3 +91,41 @@ def test_discovery_handles_no_datasets(monkeypatch):
 
     assert result["failure_state"] == "DATASET_DISCOVERY_FAILED"
     assert result["dataset_candidates"] == []
+
+
+def test_download_rejects_oversized_content_length(tmp_path):
+    destination = tmp_path / "large.csv"
+
+    class FakeResponse:
+        headers = {"Content-Length": str(
+            dataset_discovery.MAX_DOWNLOAD_BYTES + 1
+        )}
+
+    import pytest
+
+    with pytest.raises(ValueError, match="100 MB"):
+        dataset_discovery._download_limited(
+            FakeResponse(), destination
+        )
+
+    assert not destination.exists()
+
+
+def test_download_removes_partial_file_on_size_limit(tmp_path):
+    destination = tmp_path / "large.csv"
+
+    class FakeResponse:
+        headers = {}
+
+        def iter_content(self, chunk_size):
+            yield b"a" * (dataset_discovery.MAX_DOWNLOAD_BYTES + 1)
+
+    import pytest
+
+    with pytest.raises(ValueError, match="100 MB"):
+        dataset_discovery._download_limited(
+            FakeResponse(), destination
+        )
+
+    assert not destination.exists()
+
