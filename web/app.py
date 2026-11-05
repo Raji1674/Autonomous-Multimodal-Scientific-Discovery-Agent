@@ -168,18 +168,19 @@ def research():
 
     else:
         try:
-            service = get_research_service()
-
             if upload_id:
                 try:
                     parsed_id = uuid.UUID(hex=upload_id)
+
                     if parsed_id.hex != upload_id:
                         raise ValueError("Invalid upload ID")
+
                 except ValueError:
                     result = {
                         "ok": False,
                         "error": "Invalid dataset reference."
                     }
+
                 else:
                     saved_path = UPLOAD_DIR / f"{upload_id}.csv"
 
@@ -188,6 +189,7 @@ def research():
                             "ok": False,
                             "error": "Uploaded CSV not found. Please upload it again."
                         }
+
                     else:
                         validation = validate_csv_dataset(
                             saved_path,
@@ -200,13 +202,18 @@ def research():
                                 "error": "Dataset validation failed: "
                                 + "; ".join(validation.get("issues", []))
                             }
+
                         else:
+                            service = get_research_service()
+
                             result = service.run(
                                 question,
                                 dataset_path=str(saved_path),
                                 target_column=target_column
                             )
+
             else:
+                service = get_research_service()
                 result = service.run(question)
 
         except Exception:

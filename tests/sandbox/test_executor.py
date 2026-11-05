@@ -115,3 +115,51 @@ print("ROOT_ENTRIES:", os.listdir("/"))
 
     assert result["result_label"] == "executed"
     assert "WORKDIR: /workspace" in result["output"]
+
+
+def test_csv_is_mounted_read_only(tmp_path):
+    csv_file = tmp_path / "students.csv"
+    csv_file.write_text(
+        "hours,passed\n5,1\n2,0\n",
+        encoding="utf-8",
+    )
+
+    result = execute_python(
+        """
+from pathlib import Path
+import pandas as pd
+
+path = Path("/dataset.csv")
+
+print("EXISTS:", path.is_file())
+print("DATA:", pd.read_csv(path).shape)
+
+try:
+    path.write_text("modified")
+    print("WRITE_ALLOWED")
+except OSError:
+    print("WRITE_BLOCKED")
+""",
+        dataset_path=str(csv_file),
+    )
+
+    assert result["result_label"] == "executed"
+    assert "EXISTS: True" in result["output"]
+    assert "DATA: (2, 2)" in result["output"]
+    assert "WRITE_BLOCKED" in result["output"]
+    assert "WRITE_ALLOWED" not in result["output"]
+
+    assert csv_file.read_text(encoding="utf-8") == (
+        "hours,passed\n5,1\n2,0\n"
+    )
+
+
+def test_csv_mount_rejects_non_csv_file(tmp_path):
+    file_path = tmp_path / "students.txt"
+    file_path.write_text("not a CSV", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="CSV"):
+        execute_python(
+            "print('test')",
+            dataset_path=str(file_path),
+        )

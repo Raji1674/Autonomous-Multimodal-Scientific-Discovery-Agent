@@ -100,3 +100,102 @@ def test_validate_csv_dataset_rejects_missing_file(tmp_path):
 
     assert result["valid"] is False
     assert "CSV file not found" in result["issues"]
+
+
+def make_csv_dataset(path):
+    """Create a reproducible dataset with numeric and categorical features."""
+    rows = ["study_hours,attendance,school_type,passed"]
+
+    for i in range(120):
+        study_hours = (i % 10) + 1
+        attendance = 60 + (i % 40)
+        school_type = "public" if i % 2 == 0 else "private"
+        passed = 1 if study_hours >= 5 else 0
+
+        rows.append(
+            f"{study_hours},{attendance},{school_type},{passed}"
+        )
+
+    path.write_text("\n".join(rows), encoding="utf-8")
+    return path
+
+
+def test_run_plan_with_csv_supports_categorical_features(tmp_path):
+    csv_file = make_csv_dataset(tmp_path / "students.csv")
+
+    plan = make_plan(
+        model="random_forest",
+        independent_variable="n_estimators",
+        baseline_value=10,
+        treatment_value=30,
+    )
+
+    result = run_plan(
+        plan,
+        dataset_path=str(csv_file),
+        target_column="passed",
+    )
+
+    assert result["result_label"] == "executed"
+    assert result["dataset_source"] == "uploaded_csv"
+    assert result["dataset_name"] == "uploaded_csv"
+    assert result["target_column"] == "passed"
+    assert result["n_samples"] == 120
+    assert result["n_features"] == 3
+    assert len(result["baseline"]) == 5
+    assert len(result["treatment"]) == 5
+
+
+def test_run_plan_with_csv_rejects_missing_target(tmp_path):
+    csv_file = make_csv_dataset(tmp_path / "students.csv")
+
+    plan = make_plan(
+        model="random_forest",
+        independent_variable="n_estimators",
+        baseline_value=10,
+        treatment_value=30,
+    )
+
+    with pytest.raises(ValueError, match="target column"):
+        run_plan(
+            plan,
+            dataset_path=str(csv_file),
+            target_column=None,
+        )
+
+
+def test_rendered_csv_script_matches_in_process_result(tmp_path):
+    csv_file = make_csv_dataset(tmp_path / "students.csv")
+
+    plan = make_plan(
+        model="random_forest",
+        independent_variable="n_estimators",
+        baseline_value=10,
+        treatment_value=30,
+    )
+
+    script = render_script(
+        plan,
+        dataset_path=str(csv_file),
+        target_column="passed",
+    )
+
+    out = subprocess.run(
+        [sys.executable, "-I", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert out.returncode == 0, out.stderr
+
+    from_script = parse_result(out.stdout)
+    in_process = run_plan(
+        plan,
+        dataset_path=str(csv_file),
+        target_column="passed",
+    )
+
+    assert from_script["baseline"] == in_process["baseline"]
+    assert from_script["treatment"] == in_process["treatment"]
+    assert from_script["dataset_source"] == "uploaded_csv"

@@ -16,6 +16,7 @@ class CodeExecutor(BaseAgent):
 
     def run(self, state: ResearchState) -> dict:
         experiment_name = "unnamed_experiment"
+        dataset_path = None
 
         # Preferred path: generate code from a validated experiment plan.
         plan_data = state.get("experiment_plan")
@@ -23,7 +24,24 @@ class CodeExecutor(BaseAgent):
         if plan_data is not None:
             try:
                 plan = ExperimentPlan(**plan_data)
-                code = render_script(plan)
+
+                dataset_path = state.get("dataset_path")
+                target_column = state.get("target_column")
+
+                if bool(dataset_path) != bool(target_column):
+                    raise ValueError(
+                        "Dataset path and target column must be provided together."
+                    )
+
+                if dataset_path:
+                    code = render_script(
+                        plan,
+                        dataset_path="/dataset.csv",
+                        target_column=target_column,
+                    )
+                else:
+                    code = render_script(plan)
+
                 experiment_name = "validated_experiment"
 
             except (ValueError, TypeError) as exc:
@@ -54,7 +72,13 @@ class CodeExecutor(BaseAgent):
                 }
 
         try:
-            result = execute_python(code)
+            if dataset_path:
+                result = execute_python(
+                    code,
+                    dataset_path=dataset_path,
+                )
+            else:
+                result = execute_python(code)
 
             if result.get("result_label") != "executed":
                 raise SandboxExecutionError(

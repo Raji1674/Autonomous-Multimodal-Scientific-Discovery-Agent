@@ -25,6 +25,8 @@ class FailureState(str, Enum):
 class ResearchState(TypedDict, total=False):
     run_id: str
     research_question: str
+    dataset_path: str
+    target_column: str
     literature: list[dict]  # ScoredChunk.model_dump() items
     literature_summary: str
     citations: dict[str, dict]  # citation_key -> paper info

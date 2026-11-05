@@ -68,8 +68,14 @@ class ResearchService:
             synthesis=synthesis,
         )
 
-    def run(self, question: str) -> dict:
-        """Ingest real literature and execute the production workflow."""
+    
+    def run(
+        self,
+        question: str,
+        dataset_path: str | None = None,
+        target_column: str | None = None,
+    ) -> dict:
+        """Ingest literature and execute the production research workflow."""
 
         question = question.strip()
 
@@ -84,6 +90,27 @@ class ResearchService:
                 "ok": False,
                 "error": "Research questions must be 500 characters or fewer.",
             }
+
+        if bool(dataset_path) != bool(target_column):
+            return {
+                "ok": False,
+                "error": "Dataset path and target column must be provided together.",
+            }
+
+        if dataset_path:
+            from src.experiments.dataset_validator import validate_csv_dataset
+
+            validation = validate_csv_dataset(
+                dataset_path,
+                target_column,
+            )
+
+            if not validation.get("valid"):
+                return {
+                    "ok": False,
+                    "error": "Uploaded dataset validation failed.",
+                    "dataset_issues": validation.get("issues", []),
+                }
 
         # Fetch and index real literature from arXiv and PubMed.
         ingestion = run_ingestion(
@@ -110,6 +137,10 @@ class ResearchService:
             "run_id": str(uuid.uuid4()),
             "research_question": question,
         }
+
+        if dataset_path:
+            initial_state["dataset_path"] = dataset_path
+            initial_state["target_column"] = target_column
 
         try:
             result = self.graph.invoke(

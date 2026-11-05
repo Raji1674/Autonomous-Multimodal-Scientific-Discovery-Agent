@@ -1,6 +1,7 @@
 
 """Docker-based isolated Python execution."""
 
+from pathlib import Path
 import docker
 from docker.errors import DockerException
 import requests
@@ -29,8 +30,13 @@ class SandboxTimeoutError(SandboxExecutionError):
     """Raised when sandbox execution exceeds its time limit."""
 
 
-def execute_python(code: str) -> dict:
-    """Execute Python code inside a restricted Docker container."""
+
+def execute_python(code: str, dataset_path: str | None = None) -> dict:
+    """Execute Python code inside a restricted Docker container.
+
+    When dataset_path is provided, mount only that CSV file
+    inside the container at /dataset.csv as read-only.
+    """
 
     if not isinstance(code, str) or not code.strip():
         raise ValueError("Python code must be a non-empty string.")
@@ -38,36 +44,56 @@ def execute_python(code: str) -> dict:
     if len(code.encode("utf-8")) > MAX_OUTPUT_BYTES:
         raise ValueError("Python code exceeds the permitted size.")
 
+    volumes = {}
+
+    if dataset_path is not None:
+        csv_path = Path(dataset_path).resolve(strict=True)
+
+        if not csv_path.is_file():
+            raise ValueError("Dataset path must reference a file.")
+
+        if csv_path.suffix.lower() != ".csv":
+            raise ValueError("Only CSV datasets are permitted.")
+
+        volumes[str(csv_path)] = {
+            "bind": "/dataset.csv",
+            "mode": "ro",
+        }
+
     client = None
     container = None
 
     try:
         client = docker.from_env()
 
-        container = client.containers.run(
-            image=DOCKER_IMAGE,
-            command=["python", "-I", "-c", code],
-            detach=True,
-            network_mode=NETWORK_MODE,
-            mem_limit=MEMORY_LIMIT,
-            nano_cpus=int(CPU_LIMIT * 1_000_000_000),
-            pids_limit=PIDS_LIMIT,
-            read_only=READ_ONLY_ROOTFS,
-            cap_drop=["ALL"] if DROP_ALL_CAPABILITIES else [],
-            security_opt=(
+        container_options = {
+            "image": DOCKER_IMAGE,
+            "command": ["python", "-I", "-c", code],
+            "detach": True,
+            "network_mode": NETWORK_MODE,
+            "mem_limit": MEMORY_LIMIT,
+            "nano_cpus": int(CPU_LIMIT * 1_000_000_000),
+            "pids_limit": PIDS_LIMIT,
+            "read_only": READ_ONLY_ROOTFS,
+            "cap_drop": ["ALL"] if DROP_ALL_CAPABILITIES else [],
+            "security_opt": (
                 ["no-new-privileges:true"]
                 if NO_NEW_PRIVILEGES else []
             ),
-            tmpfs={
+            "tmpfs": {
                 "/tmp": f"rw,noexec,nosuid,nodev,size={TMPFS_SIZE}"
             },
-            user="65534:65534",
-            stdin_open=False,
-            tty=False,
-            auto_remove=False,
-        )
+            "user": "65534:65534",
+            "stdin_open": False,
+            "tty": False,
+            "auto_remove": False,
+        }
 
-        # Wait for container execution to finish.
+        if volumes:
+            container_options["volumes"] = volumes
+
+        container = client.containers.run(**container_options)
+
         try:
             result = container.wait(timeout=EXECUTION_TIMEOUT)
 
@@ -77,7 +103,6 @@ def execute_python(code: str) -> dict:
             requests.exceptions.ConnectionError,
             ReadTimeoutError,
         ) as exc:
-            # Stop the container when execution exceeds the time limit.
             try:
                 container.kill()
             except DockerException:
@@ -92,7 +117,6 @@ def execute_python(code: str) -> dict:
                 f"Docker wait failed: {exc}"
             ) from exc
 
-        # Read only a bounded amount of output.
         output_stream = container.logs(
             stdout=True,
             stderr=True,
@@ -144,7 +168,6 @@ def execute_python(code: str) -> dict:
         ) from exc
 
     finally:
-        # Always remove the container and close the Docker client.
         if container is not None:
             try:
                 container.remove(force=True)
