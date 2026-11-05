@@ -52,6 +52,21 @@
         <button type="submit">Upload CSV</button>
     </form>
 
+    {% if upload_id and columns %}
+    <form action="/" method="post">
+        <input type="hidden" name="upload_id" value="{{ upload_id }}">
+
+        <label for="target_column">Select target column:</label>
+        <select name="target_column" id="target_column" required>
+            {% for column in columns %}
+            <option value="{{ column }}">{{ column }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit">Validate Dataset</button>
+    </form>
+    {% endif %}
+    
     {% if message %}
         <h3>{{ message }}</h3>
     {% endif %}

@@ -1,9 +1,11 @@
 
 from src.experiments.dataset_search import search_datasets
 from pathlib import Path
-
+from src.experiments.dataset_validator import validate_csv_dataset
 import pandas as pd
 from flask import Flask, render_template, request
+import uuid
+from src.experiments.dataset_validator import validate_csv_dataset
 
 app = Flask(__name__, template_folder="templates")
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -31,36 +33,87 @@ def home():
     columns = []
     preview = []
     row_count = None
+    upload_id = None
 
     if request.method == "POST":
-        file = request.files.get("csv_file")
+        submitted_upload_id = request.form.get("upload_id", "").strip()
 
-        if not file or not file.filename:
-            message = "Please select a CSV file."
-        elif Path(file.filename).suffix.lower() != ".csv":
-            message = "Only CSV files are supported."
-        else:
+        # Handle target-column validation
+        if submitted_upload_id:
             try:
-                df = pd.read_csv(file, nrows=5)
+                parsed_id = uuid.UUID(hex=submitted_upload_id)
+                if parsed_id.hex != submitted_upload_id:
+                    raise ValueError("Invalid upload ID")
+            except ValueError:
+                message = "Invalid upload reference."
+            else:
+                saved_path = UPLOAD_DIR / f"{submitted_upload_id}.csv"
+                target_column = request.form.get("target_column", "").strip()
+                upload_id = submitted_upload_id
 
-                if df.empty:
-                    message = "The CSV file is empty."
+                if not saved_path.is_file():
+                    message = "Uploaded CSV not found. Please upload it again."
+                elif not target_column:
+                    message = "Please select a target column."
                 else:
-                    columns = df.columns.tolist()
-                    preview = df.head(5).fillna("").to_dict("records")
-                    row_count = len(df)
-                    message = (
-                        "CSV loaded successfully. "
-                        "Showing the first 5 rows for validation."
+                    validation = validate_csv_dataset(
+                        saved_path,
+                        target_column,
                     )
-            except Exception as exc:
-                message = f"Could not read the CSV: {exc}"
+
+                    columns = validation.get("column_names", [])
+                    row_count = validation.get("rows")
+
+                    if validation.get("valid"):
+                        df = pd.read_csv(saved_path, nrows=5)
+                        preview = df.fillna("").to_dict("records")
+                        message = (
+                            f"Dataset validated successfully. "
+                            f"Target column: {target_column}"
+                        )
+                    else:
+                        issues = validation.get("issues", [])
+                        message = "Dataset validation failed: " + "; ".join(issues)
+
+        # Handle a new CSV upload
+        else:
+            file = request.files.get("csv_file")
+
+            if not file or not file.filename:
+                message = "Please select a CSV file."
+            elif Path(file.filename).suffix.lower() != ".csv":
+                message = "Only CSV files are supported."
+            else:
+                upload_id = uuid.uuid4().hex
+                saved_path = UPLOAD_DIR / f"{upload_id}.csv"
+
+                try:
+                    file.save(saved_path)
+                    df = pd.read_csv(saved_path, nrows=5)
+
+                    if df.empty:
+                        saved_path.unlink(missing_ok=True)
+                        upload_id = None
+                        message = "The CSV file is empty."
+                    else:
+                        columns = df.columns.tolist()
+                        preview = df.fillna("").to_dict("records")
+                        message = (
+                            "CSV uploaded successfully. "
+                            "Select the target column to validate it."
+                        )
+
+                except Exception:
+                    saved_path.unlink(missing_ok=True)
+                    upload_id = None
+                    message = "Could not read the CSV. Please check the file."
 
     return render_template(
         "index.html",
         message=message,
         columns=columns,
         preview=preview,
+        upload_id=upload_id,
         row_count=row_count,
     )
 
