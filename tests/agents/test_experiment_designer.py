@@ -28,3 +28,37 @@ def test_invalid_plan_is_retried_with_error_feedback():
 def test_gives_up_after_max_retries():
     out = ExperimentDesigner(FakeLLM([json.dumps(BAD)] * 3), max_retries=2)(STATE)
     assert out["failure_state"] == "CODE_GENERATION_FAILED"
+
+def test_revision_prompt_includes_critic_feedback_and_previous_plan():
+    feedback = {
+        "verdict": "reject",
+        "issues": [
+            {"severity": "minor", "message": "possible overfitting"}
+        ],
+        "reasons": ["The confidence interval includes zero."],
+        "statistical_quality": 8,
+    }
+
+    previous_plan = {
+        **GOOD,
+        "research_question": STATE["research_question"],
+        "hypothesis": STATE["selected_hypothesis"]["hypothesis"],
+        "n_seeds": 20,
+    }
+
+    state = {
+        **STATE,
+        "critic_feedback": feedback,
+        "experiment_plan": previous_plan,
+    }
+
+    llm = FakeLLM([json.dumps(GOOD)])
+    out = ExperimentDesigner(llm)(state)
+
+    assert "experiment_plan" in out
+
+    prompt = llm.calls[0]["user"]
+    assert "REVISION REQUIRED" in prompt
+    assert "possible overfitting" in prompt
+    assert "Previous experiment plan" in prompt
+    assert STATE["selected_hypothesis"]["hypothesis"] in prompt

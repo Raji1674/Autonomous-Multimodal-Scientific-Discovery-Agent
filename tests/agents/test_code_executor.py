@@ -141,3 +141,66 @@ def test_experiment_plan_execution(monkeypatch):
     assert result["experiment_results"]["result_label"] == "executed"
     assert result["experiment_results"]["baseline"] == [0.82, 0.84, 0.81]
     assert result["experiment_results"]["treatment"] == [0.86, 0.87, 0.85]
+
+def test_experiment_plan_execution_with_csv_dataset(monkeypatch, tmp_path):
+    from src.experiments.protocol import ExperimentPlan
+
+    captured = {}
+
+    def mock_render_script(plan, dataset_path=None, target_column=None):
+        captured["dataset_path"] = dataset_path
+        captured["target_column"] = target_column
+        return "print('CSV experiment executed')"
+
+    def mock_execute(code, dataset_path=None):
+        captured["execute_dataset_path"] = dataset_path
+        return {
+            "result_label": "executed",
+            "exit_code": 0,
+            "output": (
+                '{"result_label":"executed",'
+                '"baseline":[0.82,0.84,0.81],'
+                '"treatment":[0.86,0.87,0.85]}'
+            ),
+            "output_truncated": False,
+        }
+
+    monkeypatch.setattr(
+        "src.agents.code_executor.render_script",
+        mock_render_script,
+    )
+    monkeypatch.setattr(
+        "src.agents.code_executor.execute_python",
+        mock_execute,
+    )
+
+    dataset = tmp_path / "students.csv"
+    dataset.write_text("study_hours,score\n2,60\n4,80\n")
+
+    plan = ExperimentPlan(
+        research_question="Does increasing C improve classification accuracy?",
+        hypothesis="Increasing C improves accuracy.",
+        null_hypothesis="Changing C does not improve accuracy.",
+        dataset="breast_cancer",
+        model="logreg",
+        metric="accuracy",
+        independent_variable="C",
+        baseline_value=0.1,
+        treatment_value=1.0,
+        expected_direction="higher",
+        n_seeds=20,
+        test_size=0.3,
+        fixed_params={},
+        falsification_criteria="Treatment accuracy does not improve.",
+    )
+
+    result = CodeExecutor().run({
+        "experiment_plan": plan.model_dump(),
+        "dataset_path": str(dataset),
+        "target_column": "score",
+    })
+
+    assert captured["dataset_path"] == "/dataset.csv"
+    assert captured["target_column"] == "score"
+    assert captured["execute_dataset_path"] == str(dataset)
+    assert result["experiment_results"]["result_label"] == "executed"
