@@ -224,3 +224,58 @@ def test_graph_interrupts_after_reviewer(tmp_path):
     checkpoint = graph.get_state(config)
 
     assert checkpoint.next == ("hypothesis",)
+
+def test_graph_resumes_from_checkpoint_without_rerunning_reviewer(tmp_path):
+    execution_order = []
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {"literature_summary": "Literature reviewed"}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {"selected_hypothesis": {"statement": "Test hypothesis"}}
+
+    def executor(state):
+        execution_order.append("executor")
+        return {"experiment_results": {"accuracy": 0.90}}
+
+    def critic(state):
+        execution_order.append("critic")
+        return {"verdict": "APPROVED"}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+        checkpoint_path=str(tmp_path / "resume.db"),
+        interrupt_after=["reviewer"],
+    )
+
+    config = new_config()
+
+    initial_result = graph.invoke(
+        {"research_question": "Predict student performance"},
+        config=config,
+    )
+
+    assert execution_order == ["reviewer"]
+
+    resumed_graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+        checkpoint_path=str(tmp_path / "resume.db"),
+    )
+
+    final_result = resumed_graph.invoke(None, config=config)
+
+    assert execution_order == [
+        "reviewer",
+        "hypothesis",
+        "executor",
+        "critic",
+    ]
+    assert final_result["verdict"] == "APPROVED"
