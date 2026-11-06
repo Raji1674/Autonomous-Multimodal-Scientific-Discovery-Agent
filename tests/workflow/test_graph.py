@@ -143,3 +143,84 @@ def test_new_config_generates_unique_thread_ids():
         config_one["configurable"]["thread_id"]
         != config_two["configurable"]["thread_id"]
     )
+    
+def test_graph_saves_checkpoint_to_sqlite(tmp_path):
+    checkpoint_path = str(tmp_path / "workflow.db")
+
+    def reviewer(state):
+        return {"literature_summary": "Saved literature"}
+
+    def hypothesis(state):
+        return {"selected_hypothesis": {"statement": "Test hypothesis"}}
+
+    def executor(state):
+        return {"experiment_results": {"accuracy": 0.90}}
+
+    def critic(state):
+        return {"verdict": "APPROVED"}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+        checkpoint_path=checkpoint_path,
+    )
+
+    config = new_config()
+
+    graph.invoke(
+        {"research_question": "Predict student performance"},
+        config=config,
+    )
+
+    assert (tmp_path / "workflow.db").exists()
+
+    checkpoint = graph.get_state(config)
+
+    assert checkpoint.values["research_question"] == (
+        "Predict student performance"
+    )
+    assert checkpoint.values["verdict"] == "APPROVED"
+
+def test_graph_interrupts_after_reviewer(tmp_path):
+    execution_order = []
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {"literature_summary": "Literature reviewed"}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {}
+
+    def executor(state):
+        execution_order.append("executor")
+        return {}
+
+    def critic(state):
+        execution_order.append("critic")
+        return {}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+        interrupt_after=["reviewer"],
+        checkpoint_path=str(tmp_path / "interrupt.db"),
+    )
+
+    config = new_config()
+
+    result = graph.invoke(
+        {"research_question": "Predict student performance"},
+        config=config,
+    )
+
+    assert execution_order == ["reviewer"]
+    assert result["literature_summary"] == "Literature reviewed"
+
+    checkpoint = graph.get_state(config)
+
+    assert checkpoint.next == ("hypothesis",)
