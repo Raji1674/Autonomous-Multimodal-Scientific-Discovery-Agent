@@ -546,8 +546,11 @@
         <div class="nav-label">WORKSPACE</div>
 
         <nav>
-            <a class="nav-link active" href="#overview">
+            <a class="nav-link active" href="#overview"></a>
                 <span class="nav-icon">⌂</span> Overview
+            </a>
+            <a class="nav-link" href="#research">
+               <span class="nav-icon">R</span> Autonomous Research
             </a>
             <a class="nav-link" href="#dataset-search">
                 <span class="nav-icon">⌕</span> Dataset Search
@@ -597,6 +600,52 @@
         {% if message %}
             <div class="message" role="status">{{ message }}</div>
         {% endif %}
+
+<!-- AUTONOMOUS RESEARCH -->
+<div class="section-heading" id="research">
+    <span class="section-number">00</span>
+    <h2>Autonomous Research</h2>
+</div>
+
+<p class="section-description">
+    Enter a research topic to discover scientific papers,
+    generate research hypotheses and identify relevant datasets.
+</p>
+
+<section class="panel">
+    <form action="/research" method="post">
+        <div class="form-row">
+            <input
+                class="search-input"
+                type="text"
+                name="research_question"
+                placeholder="Example: Machine learning for cardiovascular disease prediction"
+                required
+            >
+            <button class="btn" type="submit">
+                Start Research
+            </button>
+        </div>
+    </form>
+
+    {% if research_result %}
+        <div class="result-title">Research Results</div>
+
+        <h3>Literature Summary</h3>
+        <p>{{ research_result.literature_summary }}</p>
+
+        <h3>Generated Hypotheses</h3>
+        {% for hypothesis in research_result.hypotheses %}
+            <div class="dataset-list">
+                {{ hypothesis.statement or hypothesis.hypothesis or hypothesis }}
+            </div>
+        {% endfor %}
+
+        {% if research_result.error %}
+            <p class="muted">{{ research_result.error }}</p>
+        {% endif %}
+    {% endif %}
+</section>
 
         <!-- DATASET SEARCH -->
         <div class="section-heading" id="dataset-search">

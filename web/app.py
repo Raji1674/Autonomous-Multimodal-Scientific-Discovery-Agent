@@ -4,6 +4,13 @@ import uuid
 from pathlib import Path
 
 import pandas as pd
+from src.utils.config import load_config
+from src.llm.providers import make_client
+from src.vectorstore.chroma_store import ChromaStore
+from src.vectorstore.embeddings import SentenceTransformerEmbedder
+from src.ingestion.pipeline import run_ingestion
+from src.agents.literature_reviewer import LiteratureReviewer
+from src.agents.hypothesis_generator import HypothesisGenerator
 from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.utils import secure_filename
 from src.agents.csv_experiment_agent import CSVExperimentAgent
@@ -52,6 +59,7 @@ def render_dashboard(**kwargs):
         "evaluation_result": None,
         "keyword": "",
         "datasets": [],
+        "research_result": None,
     }
     defaults.update(kwargs)
 
@@ -245,6 +253,108 @@ def search():
         datasets=datasets,
     )
 
+
+@app.route("/research", methods=["POST"])
+def research():
+    topic = request.form.get("research_question", "").strip()
+
+    if not topic:
+        return render_dashboard(
+            message="Please enter a research topic."
+        )
+
+    try:
+        app.logger.info("Starting research for topic: %s", topic)
+
+        # Load configuration and initialize real components
+        cfg = load_config()
+        llm = make_client(cfg.models)
+
+        store = ChromaStore(
+            cfg.retrieval.chroma_path,
+            SentenceTransformerEmbedder(cfg.retrieval.embedding_model),
+        )
+
+        # Step 1: Retrieve and index real research papers
+        ingestion_report = run_ingestion(
+            topic,
+            store,
+            max_per_source=10,
+        )
+
+        if ingestion_report.chunks_written <= 0:
+            return render_dashboard(
+                message="No research papers could be indexed. Check ArXiv/PubMed connectivity.",
+                research_result={
+                    "research_question": topic,
+                    "error": "No literature evidence was indexed.",
+                    "ingestion": {
+                        "fetched": ingestion_report.fetched,
+                        "after_dedupe": ingestion_report.after_dedupe,
+                        "chunks_written": ingestion_report.chunks_written,
+                        "failures": ingestion_report.failures,
+                    },
+                },
+            )
+
+        # Step 2: Literature review using retrieved papers
+        state = {"research_question": topic}
+
+        reviewer = LiteratureReviewer(
+            store,
+            llm,
+            top_k=cfg.retrieval.top_k,
+        )
+
+        literature_result = reviewer.run(state)
+
+        if literature_result.get("failure_state"):
+            return render_dashboard(
+                message="Literature review failed.",
+                research_result={
+                    **literature_result,
+                    "research_question": topic,
+                },
+            )
+
+        state.update(literature_result)
+
+        # Step 3: Generate hypotheses from literature
+        generator = HypothesisGenerator(
+            llm,
+            max_retries=cfg.agents.max_hypothesis_retries,
+        )
+
+        hypothesis_result = generator.run(state)
+
+        final_result = {
+            **literature_result,
+            **hypothesis_result,
+            "research_question": topic,
+            "ingestion": {
+                "fetched": ingestion_report.fetched,
+                "after_dedupe": ingestion_report.after_dedupe,
+                "chunks_written": ingestion_report.chunks_written,
+                "failures": ingestion_report.failures,
+            },
+        }
+
+        return render_dashboard(
+            message="Research pipeline completed."
+            if not hypothesis_result.get("failure_state")
+            else "Literature review completed, but hypothesis generation failed.",
+            research_result=final_result,
+        )
+
+    except Exception:
+        app.logger.exception("Autonomous research pipeline failed")
+        return render_dashboard(
+            message="Research failed. Check the Flask terminal logs.",
+            research_result={
+                "research_question": topic,
+                "error": "An unexpected error occurred during research.",
+            },
+        )
 
 @app.errorhandler(413)
 def file_too_large(_error):

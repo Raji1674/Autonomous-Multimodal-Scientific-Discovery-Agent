@@ -7,3 +7,27 @@ outputs/
 
 .pytest_cache/
 debug_experiment.py
+
+# Local datasets and generated files
+data/chroma/
+data/downloaded/
+web/uploads/
+
+# Backup files
+*.bak
+*.backup
+
+# Python and test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
