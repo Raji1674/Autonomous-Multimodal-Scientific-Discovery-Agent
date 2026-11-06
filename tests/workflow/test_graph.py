@@ -356,3 +356,39 @@ def test_graph_stops_when_designer_fails():
 
     assert execution_order == ["reviewer", "hypothesis", "designer"]
     assert result["failure_state"] == "CODE_GENERATION_FAILED"
+
+def test_graph_stops_when_executor_fails():
+    execution_order = []
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {}
+
+    def executor(state):
+        execution_order.append("executor")
+        return {
+            "failure_state": "EXECUTION_FAILED",
+            "error": "Code execution failed",
+        }
+
+    def critic(state):
+        execution_order.append("critic")
+        return {}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+    )
+
+    result = graph.invoke({
+        "research_question": "Predict student performance"
+    })
+
+    assert execution_order == ["reviewer", "hypothesis", "executor"]
+    assert result["failure_state"] == "EXECUTION_FAILED"
