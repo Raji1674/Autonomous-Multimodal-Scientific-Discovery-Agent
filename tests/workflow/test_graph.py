@@ -438,3 +438,51 @@ def test_graph_stops_when_critic_fails():
         "critic",
     ]
     assert result["failure_state"] == "STATISTICAL_ANALYSIS_FAILED"
+
+def test_graph_preserves_synthesis_failure():
+    execution_order = []
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {}
+
+    def executor(state):
+        execution_order.append("executor")
+        return {}
+
+    def critic(state):
+        execution_order.append("critic")
+        return {}
+
+    def synthesis(state):
+        execution_order.append("synthesis")
+        return {
+            "failure_state": "SYNTHESIS_FAILED",
+            "error": "Report generation failed",
+        }
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+        synthesis=synthesis,
+    )
+
+    result = graph.invoke({
+        "research_question": "Predict student performance"
+    })
+
+    assert execution_order == [
+        "reviewer",
+        "hypothesis",
+        "executor",
+        "critic",
+        "synthesis",
+    ]
+    assert result["failure_state"] == "SYNTHESIS_FAILED"
+    assert result["error"] == "Report generation failed"
