@@ -392,3 +392,49 @@ def test_graph_stops_when_executor_fails():
 
     assert execution_order == ["reviewer", "hypothesis", "executor"]
     assert result["failure_state"] == "EXECUTION_FAILED"
+
+def test_graph_stops_when_critic_fails():
+    execution_order = []
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {}
+
+    def executor(state):
+        execution_order.append("executor")
+        return {}
+
+    def critic(state):
+        execution_order.append("critic")
+        return {
+            "failure_state": "STATISTICAL_ANALYSIS_FAILED",
+            "error": "Statistical analysis failed",
+        }
+
+    def synthesis(state):
+        execution_order.append("synthesis")
+        return {"final_report": "Research completed"}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+        synthesis=synthesis,
+    )
+
+    result = graph.invoke({
+        "research_question": "Predict student performance"
+    })
+
+    assert execution_order == [
+        "reviewer",
+        "hypothesis",
+        "executor",
+        "critic",
+    ]
+    assert result["failure_state"] == "STATISTICAL_ANALYSIS_FAILED"
