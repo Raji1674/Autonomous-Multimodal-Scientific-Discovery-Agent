@@ -279,3 +279,39 @@ def test_graph_resumes_from_checkpoint_without_rerunning_reviewer(tmp_path):
         "critic",
     ]
     assert final_result["verdict"] == "APPROVED"
+
+def test_graph_stops_when_hypothesis_fails():
+    execution_order = []
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {
+            "failure_state": "HYPOTHESIS_FAILED",
+            "error": "Hypothesis generation failed",
+        }
+
+    def executor(state):
+        execution_order.append("executor")
+        return {}
+
+    def critic(state):
+        execution_order.append("critic")
+        return {}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        executor=executor,
+        critic=critic,
+    )
+
+    result = graph.invoke({
+        "research_question": "Predict student performance"
+    })
+
+    assert execution_order == ["reviewer", "hypothesis"]
+    assert result["failure_state"] == "HYPOTHESIS_FAILED"
