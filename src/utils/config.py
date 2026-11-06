@@ -25,6 +25,7 @@ class RetrievalConfig(BaseModel):
 
 class AgentsConfig(BaseModel):
     max_hypothesis_retries: int = 2
+    max_revisions: int = 2
 
 
 class AppConfig(BaseModel):

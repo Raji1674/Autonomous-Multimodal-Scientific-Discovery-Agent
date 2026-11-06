@@ -42,3 +42,5 @@ class ResearchState(TypedDict, total=False):
     error: str | None
     costs: dict
     final_report: str
+    revision_count: int
+    revision_history: list[dict]

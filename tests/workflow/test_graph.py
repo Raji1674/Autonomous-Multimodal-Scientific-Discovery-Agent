@@ -486,3 +486,85 @@ def test_graph_preserves_synthesis_failure():
     ]
     assert result["failure_state"] == "SYNTHESIS_FAILED"
     assert result["error"] == "Report generation failed"
+
+
+def test_graph_revises_experiment_when_critic_authorizes_revision():
+    execution_order = []
+    critic_calls = 0
+
+    def reviewer(state):
+        execution_order.append("reviewer")
+        return {}
+
+    def hypothesis(state):
+        execution_order.append("hypothesis")
+        return {}
+
+    def designer(state):
+        execution_order.append("designer")
+        return {
+            "experiment_plan": {
+                "version": len([
+                    item for item in execution_order
+                    if item == "designer"
+                ])
+            }
+        }
+
+    def executor(state):
+        execution_order.append("executor")
+        return {}
+
+    def critic(state):
+        nonlocal critic_calls
+        critic_calls += 1
+        execution_order.append("critic")
+
+        if critic_calls == 1:
+            return {
+                "verdict": "inconclusive",
+                "critic_feedback": {
+                    "revision_required": True,
+                    "revision_reason": "Correct a methodological issue.",
+                },
+            }
+
+        return {
+            "verdict": "accept",
+            "critic_feedback": {
+                "revision_required": False,
+            },
+        }
+
+    def synthesis(state):
+        execution_order.append("synthesis")
+        return {"final_report": "Research completed"}
+
+    graph = build_graph(
+        reviewer=reviewer,
+        hypothesis=hypothesis,
+        designer=designer,
+        executor=executor,
+        critic=critic,
+        synthesis=synthesis,
+        max_revisions=2,
+    )
+
+    result = graph.invoke({
+        "research_question": "Predict student performance",
+    })
+
+    assert execution_order == [
+        "reviewer",
+        "hypothesis",
+        "designer",
+        "executor",
+        "critic",
+        "designer",
+        "executor",
+        "critic",
+        "synthesis",
+    ]
+    assert result["revision_count"] == 1
+    assert len(result["revision_history"]) == 1
+    assert result["final_report"] == "Research completed"

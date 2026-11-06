@@ -66,6 +66,7 @@ class ResearchService:
             executor=executor,
             critic=critic,
             synthesis=synthesis,
+            max_revisions=self.cfg.agents.max_revisions,
         )
 
     
