@@ -27,10 +27,15 @@ class FakeGraph:
 def research_service():
     """Create a service without initializing production dependencies."""
     service = ResearchService.__new__(ResearchService)
+    service.cfg = SimpleNamespace(
+        retrieval=SimpleNamespace(
+            download_pdfs=False,
+            max_pdf_papers=0,
+        )
+    )
     service.store = object()
     service.graph = FakeGraph()
     return service
-
 
 @pytest.fixture
 def successful_ingestion(monkeypatch):

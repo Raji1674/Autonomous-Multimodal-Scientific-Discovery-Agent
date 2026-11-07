@@ -146,7 +146,13 @@ class StatisticalCritic:
         if baseline["sd"] <= 1e-12 and treatment["sd"] <= 1e-12:
             flag("minor", "zero variance across seeds; check that splits vary")
 
-        if baseline["mean"] > 0.99 and treatment["mean"] > 0.99:
+        if (
+            baseline["mean"] > 0.99
+            and treatment["mean"] > 0.99
+            and baseline["mean"] <= 1.0
+            and treatment["mean"] <= 1.0
+            and result.get("metric") in {"accuracy", "f1_macro"}
+        ):
             flag("minor", "ceiling effect: both arms are near-perfect")
 
         if n_tests > 1:
@@ -154,10 +160,21 @@ class StatisticalCritic:
 
         train_scores = result.get("treatment_train")
         test_scores = result.get("treatment")
-        if train_scores and test_scores:
-            gap = float(np.mean(train_scores) - np.mean(test_scores))
+
+        if train_scores is not None and test_scores is not None:
+            train_mean = float(np.mean(train_scores))
+            test_mean = float(np.mean(test_scores))
+
+            if expected_direction == "higher":
+                gap = train_mean - test_mean
+            else:
+                gap = test_mean - train_mean
+
             if gap > self.overfit_gap:
-                flag("minor", f"possible overfitting: train-test gap {gap:.3f}")
+                flag(
+                    "minor",
+                    f"possible overfitting: train-test gap {gap:.3f}",
+                )
 
         p_value = analysis["p"]
         p_adjusted = None if p_value is None else min(1.0, float(p_value) * int(n_tests))

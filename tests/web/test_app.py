@@ -78,7 +78,7 @@ def test_upload_rejects_invalid_csv(client):
     )
 
     assert validation_response.status_code == 200
-    assert b"at least two classes" in validation_response.data.lower()
+    assert b"at least two unique values" in validation_response.data.lower()
 
 def test_research_without_csv(client, monkeypatch):
     class FakeService:

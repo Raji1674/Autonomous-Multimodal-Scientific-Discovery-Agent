@@ -80,3 +80,63 @@ def test_reproducibility_check_detects_tampered_scores():
     assert check_reproducibility(plan.model_dump(), result)["reproduced"] is True
     result["treatment"][0] += 0.05
     assert check_reproducibility(plan.model_dump(), result)["reproduced"] is False
+
+def test_lower_is_better_metric_accepts_improvement():
+    diffs = -0.5 + np.tile([0.02, -0.02, 0.04, -0.04], 5)
+
+    result = synthetic(diffs)
+    plan = {
+        **PLAN,
+        "task_type": "regression",
+        "model": "random_forest_regressor",
+        "metric": "mae",
+        "expected_direction": "lower",
+        "independent_variable": "n_estimators",
+        "baseline_value": 10,
+        "treatment_value": 20,
+    }
+
+    ev = StatisticalCritic(
+        min_abs_diff=0.1,
+        min_effect=0.1,
+    ).evaluate(plan, result)
+
+    assert ev["verdict"] == "accept"
+
+
+def test_regression_overfit_gap_uses_lower_is_better_direction():
+    result = synthetic(np.full(20, -0.2))
+    result["treatment_train"] = [1.0] * 20
+    result["treatment"] = [2.0] * 20
+
+    critic = StatisticalCritic(overfit_gap=0.15)
+    ev = critic.evaluate_scores(
+        result,
+        expected_direction="lower",
+    )
+
+    assert any(
+        "possible overfitting" in issue["message"]
+        for issue in ev["issues"]
+    )
+
+
+def test_regression_does_not_trigger_accuracy_ceiling_warning():
+    diffs = -0.2 + np.tile(
+        [0.02, -0.02, 0.04, -0.04],
+        5,
+    )
+
+    result = synthetic(diffs)
+    result["baseline"] = [0.999] * 20
+    result["treatment"] = [0.999] * 20
+
+    ev = StatisticalCritic().evaluate_scores(
+        result,
+        expected_direction="lower",
+    )
+
+    assert not any(
+        "ceiling effect" in issue["message"]
+        for issue in ev["issues"]
+    )
