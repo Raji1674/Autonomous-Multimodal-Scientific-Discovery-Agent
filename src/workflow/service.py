@@ -2,7 +2,7 @@
 """Production research service: ingestion -> agents -> research report."""
 from __future__ import annotations
 
-import uuid
+import re
 
 from src.agents.literature_reviewer import LiteratureReviewer
 from src.agents.hypothesis_generator import HypothesisGenerator
@@ -20,6 +20,30 @@ from src.utils.config import load_config
 from src.vectorstore.embeddings import SentenceTransformerEmbedder
 from src.vectorstore.chroma_store import ChromaStore
 from src.workflow.graph import build_graph, new_config
+
+
+def find_excluded_columns(question: str, column_names: list[str]) -> list[str]:
+    """Find dataset columns explicitly excluded in the research question."""
+
+    pattern = (
+        r"\b(?:exclude|excluding|omit|omitting|remove|removing|drop|dropping)"
+        r"\s+(.+?)"
+        r"(?=\s+from\s+(?:the\s+)?(?:predictors|features|input\s+variables)"
+        r"|\s+as\s+(?:predictors|features)|[.;\n]|$)"
+    )
+
+    matches = re.findall(pattern, question, flags=re.IGNORECASE)
+    requested_text = " ".join(matches)
+
+    excluded = []
+
+    for column in column_names:
+        column_pattern = rf"(?<!\w){re.escape(column)}(?!\w)"
+
+        if re.search(column_pattern, requested_text, flags=re.IGNORECASE):
+            excluded.append(column)
+
+    return excluded
 
 
 class ResearchService:
@@ -67,9 +91,9 @@ class ResearchService:
             critic=critic,
             synthesis=synthesis,
             max_revisions=self.cfg.agents.max_revisions,
+            checkpoint_path=self.cfg.agents.checkpoint_path,
         )
 
-    
     def run(
         self,
         question: str,
@@ -98,6 +122,8 @@ class ResearchService:
                 "error": "Dataset path and target column must be provided together.",
             }
 
+        validation = None
+
         if dataset_path:
             from src.experiments.dataset_validator import validate_csv_dataset
 
@@ -118,6 +144,8 @@ class ResearchService:
             question,
             self.store,
             max_per_source=10,
+            pdf_extractor=self._pdf_extractor(),
+            max_pdf_papers=self.cfg.retrieval.max_pdf_papers,
         )
 
         ingestion_details = {
@@ -134,19 +162,34 @@ class ResearchService:
                 "ingestion": ingestion_details,
             }
 
+        run_config = new_config()
+        run_id = run_config["configurable"]["thread_id"]
+
         initial_state = {
-            "run_id": str(uuid.uuid4()),
+            "run_id": run_id,
+            "workflow_thread_id": run_id,
             "research_question": question,
         }
 
-        if dataset_path:
-            initial_state["dataset_path"] = dataset_path
-            initial_state["target_column"] = target_column
+        if dataset_path and validation:
+            column_names = validation.get("column_names", [])
+            excluded_columns = find_excluded_columns(
+                question,
+                column_names,
+            )
+
+            initial_state.update({
+                "dataset_path": dataset_path,
+                "target_column": target_column,
+                "dataset_task_type": validation.get("task_type"),
+                "dataset_columns": column_names,
+                "excluded_columns": excluded_columns,
+            })
 
         try:
             result = self.graph.invoke(
                 initial_state,
-                config=new_config(),
+                config=run_config,
             )
         except Exception:
             return {
@@ -159,6 +202,7 @@ class ResearchService:
 
         return {
             "ok": not failed,
+            "run_id": run_id,
             "error": result.get("error") if failed else None,
             "failure_state": result.get("failure_state"),
             "report": result.get("final_report", ""),
@@ -167,3 +211,11 @@ class ResearchService:
             "results": result.get("experiment_results"),
             "ingestion": ingestion_details,
         }
+
+    def _pdf_extractor(self):
+        if not self.cfg.retrieval.download_pdfs:
+            return None
+
+        from src.retrieval.pdf import PdfTextExtractor
+
+        return PdfTextExtractor()

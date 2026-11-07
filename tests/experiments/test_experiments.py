@@ -124,6 +124,8 @@ def test_run_plan_with_csv_supports_categorical_features(tmp_path):
     csv_file = make_csv_dataset(tmp_path / "students.csv")
 
     plan = make_plan(
+        dataset="uploaded_csv",
+        task_type="classification",
         model="random_forest",
         independent_variable="n_estimators",
         baseline_value=10,
@@ -168,6 +170,8 @@ def test_rendered_csv_script_matches_in_process_result(tmp_path):
     csv_file = make_csv_dataset(tmp_path / "students.csv")
 
     plan = make_plan(
+        dataset="uploaded_csv",
+        task_type="classification",
         model="random_forest",
         independent_variable="n_estimators",
         baseline_value=10,
@@ -199,3 +203,45 @@ def test_rendered_csv_script_matches_in_process_result(tmp_path):
     assert from_script["baseline"] == in_process["baseline"]
     assert from_script["treatment"] == in_process["treatment"]
     assert from_script["dataset_source"] == "uploaded_csv"
+
+def test_run_plan_with_csv_supports_regression_and_excluded_columns(tmp_path):
+    import pandas as pd
+
+    csv_file = tmp_path / "students.csv"
+    df = pd.DataFrame({
+        "studytime": [1, 2, 3, 4, 5] * 20,
+        "absences": [0, 2, 1, 3, 4] * 20,
+        "G1": [10, 12, 14, 16, 18] * 20,
+        "G2": [11, 13, 15, 17, 19] * 20,
+        "G3": [9, 11, 13, 15, 17] * 20,
+    })
+    df.to_csv(csv_file, index=False)
+
+    plan = make_plan(
+        dataset="uploaded_csv",
+        task_type="regression",
+        model="random_forest_regressor",
+        metric="mae",
+        independent_variable="n_estimators",
+        baseline_value=10,
+        treatment_value=30,
+        expected_direction="lower",
+        excluded_columns=["G1", "G2"],
+    )
+
+    result = run_plan(
+        plan,
+        dataset_path=str(csv_file),
+        target_column="G3",
+    )
+
+    assert result["result_label"] == "executed"
+    assert result["dataset_source"] == "uploaded_csv"
+    assert result["task_type"] == "regression"
+    assert result["target_column"] == "G3"
+    assert "G1" not in result["feature_columns"]
+    assert "G2" not in result["feature_columns"]
+    assert "G3" not in result["feature_columns"]
+    assert result["n_features"] == 2
+    assert len(result["baseline"]) == 5
+    assert len(result["treatment"]) == 5

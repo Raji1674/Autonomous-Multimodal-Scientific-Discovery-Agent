@@ -16,24 +16,48 @@ class CodeExecutor(BaseAgent):
 
     def run(self, state: ResearchState) -> dict:
         experiment_name = "unnamed_experiment"
-        dataset_path = None
-
-        # Preferred path: generate code from a validated experiment plan.
+        dataset_path = state.get("dataset_path")
+        target_column = state.get("target_column")
         plan_data = state.get("experiment_plan")
+
+        # Uploaded CSV experiments must always use a validated plan.
+        # Never silently fall back to generated code or a built-in dataset.
+        if dataset_path and plan_data is None:
+            return {
+                "failure_state": FailureState.CODE_GENERATION_FAILED.value,
+                "error": (
+                    "Uploaded CSV experiment requires a validated "
+                    "experiment plan. Refusing to run a different dataset."
+                ),
+            }
+
+        if bool(dataset_path) != bool(target_column):
+            return {
+                "failure_state": FailureState.CODE_GENERATION_FAILED.value,
+                "error": "Dataset path and target column must be provided together.",
+            }
 
         if plan_data is not None:
             try:
                 plan = ExperimentPlan(**plan_data)
 
-                dataset_path = state.get("dataset_path")
-                target_column = state.get("target_column")
+                if dataset_path:
+                    if plan.dataset != "uploaded_csv":
+                        raise ValueError(
+                            "Uploaded CSV requires dataset='uploaded_csv'."
+                        )
 
-                if bool(dataset_path) != bool(target_column):
-                    raise ValueError(
-                        "Dataset path and target column must be provided together."
+                    expected_task = (
+                        state.get("dataset_task_type")
+                        or state.get("task_type")
                     )
 
-                if dataset_path:
+                    if expected_task and plan.task_type != expected_task:
+                        raise ValueError(
+                            "Experiment plan task type does not match "
+                            "the uploaded dataset."
+                        )
+
                     code = render_script(
                         plan,
                         dataset_path="/dataset.csv",
@@ -51,7 +75,7 @@ class CodeExecutor(BaseAgent):
                 }
 
         else:
-            # Backward-compatible path: execute supplied generated code.
+            # Backward-compatible path for non-CSV generated code.
             generated = state.get("generated_code")
 
             if not isinstance(generated, dict):

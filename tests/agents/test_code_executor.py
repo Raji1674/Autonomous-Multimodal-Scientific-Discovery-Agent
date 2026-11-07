@@ -181,7 +181,7 @@ def test_experiment_plan_execution_with_csv_dataset(monkeypatch, tmp_path):
         research_question="Does increasing C improve classification accuracy?",
         hypothesis="Increasing C improves accuracy.",
         null_hypothesis="Changing C does not improve accuracy.",
-        dataset="breast_cancer",
+        dataset="uploaded_csv",
         model="logreg",
         metric="accuracy",
         independent_variable="C",

@@ -1,8 +1,5 @@
 
-"""Vetted experiment code: one function, used in-process AND rendered as a sandbox script.
-
-Both execution paths run identical code to preserve result consistency.
-"""
+"""Vetted experiment code: shared by in-process and Docker execution."""
 from __future__ import annotations
 
 import inspect
@@ -22,42 +19,100 @@ def _experiment(
     import numpy as np
     import pandas as pd
     import sklearn
+
     from sklearn import datasets
+    from sklearn.base import clone
     from sklearn.compose import ColumnTransformer
-    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.ensemble import (
+        RandomForestClassifier,
+        RandomForestRegressor,
+    )
     from sklearn.impute import SimpleImputer
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import accuracy_score, f1_score
+    from sklearn.linear_model import (
+        LinearRegression,
+        LogisticRegression,
+        Ridge,
+    )
+    from sklearn.metrics import (
+        accuracy_score,
+        f1_score,
+        mean_absolute_error,
+        mean_squared_error,
+        r2_score,
+    )
     from sklearn.model_selection import train_test_split
     from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.pipeline import make_pipeline, Pipeline
+    from sklearn.pipeline import Pipeline, make_pipeline
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
     from sklearn.svm import SVC
-    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.tree import (
+        DecisionTreeClassifier,
+        DecisionTreeRegressor,
+    )
+
+    task_type = plan.get("task_type", "classification")
+    metric = plan["metric"]
+    excluded_columns = list(plan.get("excluded_columns") or [])
 
     dataset_metadata = {
         "dataset_source": "builtin",
         "dataset_name": plan["dataset"],
         "target_column": None,
+        "excluded_columns": [],
     }
 
     if dataset_path is not None:
         if not target_column:
             raise ValueError("A target column is required for CSV experiments")
 
+        if plan["dataset"] != "uploaded_csv":
+            raise ValueError(
+                "Uploaded CSV experiments require dataset='uploaded_csv'"
+            )
+
         df = pd.read_csv(dataset_path)
 
         if target_column not in df.columns:
             raise ValueError("Selected target column was not found")
 
-        X = df.drop(columns=[target_column])
+        if target_column in excluded_columns:
+            raise ValueError("The target column cannot be excluded from the dataset")
+
+        missing_exclusions = [
+            column for column in excluded_columns
+            if column not in df.columns
+        ]
+        if missing_exclusions:
+            raise ValueError(
+                f"Excluded columns were not found: {missing_exclusions}"
+            )
+
+        drop_columns = [target_column, *excluded_columns]
+        X = df.drop(columns=drop_columns)
         y = df[target_column]
 
         if X.empty or X.shape[1] == 0:
-            raise ValueError("CSV must contain at least one feature")
+            raise ValueError("CSV must contain at least one predictor feature")
 
-        if y.nunique() < 2 or y.nunique() > 50:
-            raise ValueError("CSV target must contain between 2 and 50 classes")
+        if y.empty or y.isna().any():
+            raise ValueError("CSV target contains no samples or missing values")
+
+        if task_type == "regression":
+            y = pd.to_numeric(y, errors="raise")
+            if not np.isfinite(y.to_numpy(dtype=float)).all():
+                raise ValueError("Regression target contains non-finite values")
+            if y.nunique() < 2:
+                raise ValueError("Regression target must contain at least two values")
+
+        elif task_type == "classification":
+            if y.nunique() < 2 or y.nunique() > 50:
+                raise ValueError(
+                    "Classification target must contain between 2 and 50 classes"
+                )
+            if min(y.value_counts()) < 2:
+                raise ValueError("Each target class needs at least two samples")
+        else:
+            raise ValueError(f"Unsupported task type: {task_type}")
 
         numeric = X.select_dtypes(include="number").columns.tolist()
         categorical = X.select_dtypes(exclude="number").columns.tolist()
@@ -85,29 +140,42 @@ def _experiment(
             ))
 
         preprocessing = ColumnTransformer(transformers)
+
         dataset_metadata = {
             "dataset_source": "uploaded_csv",
             "dataset_name": "uploaded_csv",
             "target_column": target_column,
+            "excluded_columns": excluded_columns,
+            "feature_columns": X.columns.tolist(),
         }
 
     else:
+        if task_type != "classification":
+            raise ValueError(
+                "Regression experiments currently require an uploaded CSV"
+            )
+
         loaders = {
             "iris": datasets.load_iris,
             "wine": datasets.load_wine,
             "breast_cancer": datasets.load_breast_cancer,
             "digits": datasets.load_digits,
         }
+
+        if plan["dataset"] not in loaders:
+            raise ValueError(f"Unsupported built-in dataset: {plan['dataset']}")
+
         X, y = loaders[plan["dataset"]](return_X_y=True)
         preprocessing = None
 
     if len(y) == 0 or pd.isna(y).any():
         raise ValueError("Dataset target contains no samples or missing values")
 
-    if min(pd.Series(y).value_counts()) < 2:
+    if task_type == "classification" and min(
+        pd.Series(y).value_counts()
+    ) < 2:
         raise ValueError("Each target class needs at least two samples")
 
-    
     def build(value, seed):
         kw = dict(plan.get("fixed_params") or {})
         kw[plan["independent_variable"]] = value
@@ -121,13 +189,27 @@ def _experiment(
             model = KNeighborsClassifier(**kw)
         elif name == "tree":
             model = DecisionTreeClassifier(random_state=seed, **kw)
+        elif name == "random_forest":
+            model = RandomForestClassifier(
+                random_state=seed, n_jobs=1, **kw
+            )
+        elif name == "linear_regression":
+            model = LinearRegression(**kw)
+        elif name == "decision_tree_regressor":
+            model = DecisionTreeRegressor(random_state=seed, **kw)
+        elif name == "random_forest_regressor":
+            model = RandomForestRegressor(
+                random_state=seed, n_jobs=1, **kw
+            )
+        elif name == "ridge":
+            model = Ridge(**kw)
         else:
-            model = RandomForestClassifier(random_state=seed, n_jobs=1, **kw)
+            raise ValueError(f"Unsupported model: {name}")
 
         if preprocessing is not None:
             return Pipeline([
-                ("preprocessing", preprocessing),
-                ("classifier", model),
+                ("preprocessing", clone(preprocessing)),
+                ("estimator", model),
             ])
 
         if name in ("logreg", "svm", "knn"):
@@ -135,22 +217,24 @@ def _experiment(
 
         return model
 
-
-        if preprocessing is not None:
-            return Pipeline([
-                ("preprocessing", preprocessing),
-                ("classifier", model),
-            ])
-
-        return make_pipeline(StandardScaler(), model)
-
     def score(model, Xs, ys):
         pred = model.predict(Xs)
-        if plan["metric"] == "accuracy":
+
+        if metric == "accuracy":
             return float(accuracy_score(ys, pred))
-        return float(f1_score(ys, pred, average="macro"))
+        if metric == "f1_macro":
+            return float(f1_score(ys, pred, average="macro"))
+        if metric == "mae":
+            return float(mean_absolute_error(ys, pred))
+        if metric == "rmse":
+            return float(np.sqrt(mean_squared_error(ys, pred)))
+        if metric == "r2":
+            return float(r2_score(ys, pred))
+
+        raise ValueError(f"Unsupported metric: {metric}")
 
     t0 = time.time()
+
     out = {
         "baseline": [],
         "treatment": [],
@@ -159,12 +243,18 @@ def _experiment(
     }
 
     for seed in range(plan["n_seeds"]):
+        split_options = {
+            "test_size": plan["test_size"],
+            "random_state": seed,
+        }
+
+        if task_type == "classification":
+            split_options["stratify"] = y
+
         Xtr, Xte, ytr, yte = train_test_split(
             X,
             y,
-            test_size=plan["test_size"],
-            stratify=y,
-            random_state=seed,
+            **split_options,
         )
 
         for arm, value in (
@@ -179,6 +269,8 @@ def _experiment(
         "result_label": "executed",
         **out,
         **dataset_metadata,
+        "task_type": task_type,
+        "metric": metric,
         "n_samples": int(len(y)),
         "n_features": int(X.shape[1]),
         "n_train": int(len(Xtr)),
