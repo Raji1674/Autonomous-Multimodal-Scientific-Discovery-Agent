@@ -1,4 +1,6 @@
+
 from pathlib import Path
+import csv
 import pandas as pd
 
 
@@ -17,8 +19,25 @@ def validate_csv_dataset(
         return {"valid": False, "issues": ["Only CSV files are supported"]}
 
     try:
+        # Check original CSV headers before pandas renames duplicates.
+        with path.open("r", encoding="utf-8-sig", newline="") as file:
+            header = next(csv.reader(file), [])
+
+        if len(header) != len(set(header)):
+            return {
+                "valid": False,
+                "issues": ["Duplicate column names found"],
+            }
+
         df = pd.read_csv(path)
-    except (OSError, UnicodeError, pd.errors.ParserError, ValueError) as exc:
+
+    except (
+        OSError,
+        UnicodeError,
+        csv.Error,
+        pd.errors.ParserError,
+        ValueError,
+    ) as exc:
         return {"valid": False, "issues": [f"Cannot read CSV: {exc}"]}
 
     issues = []
@@ -71,6 +90,7 @@ def validate_csv_dataset(
                 )
     else:
         all_null_columns = df.columns[df.isna().all()].tolist()
+
         if all_null_columns:
             issues.append(
                 f"Columns contain only missing values: {all_null_columns}"
