@@ -24,6 +24,18 @@ Include:
 8. Limitations.
 9. Conclusion and future work.
 
+Statistical verdict rules:
+- accept: Pre-set statistical criteria were met in the expected direction.
+  This does not prove the hypothesis is true.
+- reject: Statistically significant evidence was found in the opposite
+  direction to the hypothesis.
+- inconclusive: There is insufficient evidence to support or reject
+  the hypothesis.
+
+Never describe an inconclusive result as a rejection.
+Do not contradict the statistical verdict or statistical results.
+Clearly distinguish statistical significance from practical significance.
+
 Do not invent citations, experimental results, or statistical values.
 Clearly distinguish proposed work, missing evidence, and unapproved findings.
 """

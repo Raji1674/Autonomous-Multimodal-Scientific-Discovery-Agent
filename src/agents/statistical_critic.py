@@ -15,9 +15,15 @@ from src.statistics.significance import paired_analysis
 EXPLAIN_SYSTEM = (
     "You explain statistical results to a researcher in 3-4 plain sentences. "
     "Use ONLY the numbers provided; never recompute, round differently, or invent "
-    "values. Do not claim a discovery or novelty. 'accept' means the pre-set "
-    "thresholds were met, not that the hypothesis is true."
+    "values. Do not claim a discovery or novelty. "
+    "'accept' means the pre-set statistical criteria were met in the expected "
+    "direction, not that the hypothesis is proven. "
+    "'reject' means statistically significant evidence was found in the "
+    "opposite direction to the hypothesis. "
+    "'inconclusive' means there is insufficient evidence to support or reject "
+    "the hypothesis. Never describe an inconclusive result as a rejection."
 )
+
 
 
 class StatisticalCritic:
@@ -217,16 +223,22 @@ class StatisticalCritic:
             )
         if not effect_ok:
             reasons.append(f"|effect size| {abs(effect_size):.2f} is below {self.min_effect}")
-        if significant and ci_excludes_zero and not direction_ok:
-            reasons.append("significant effect in the OPPOSITE direction to the hypothesis")
 
-        verdict = (
-            "accept"
-            if significant and ci_excludes_zero and practical_ok and effect_ok and direction_ok
-            else "reject"
-        )
-        if verdict == "accept":
-            reasons.append("all pre-set criteria met")
+        if significant and ci_excludes_zero and practical_ok and effect_ok:
+            if direction_ok:
+                verdict = "accept"
+                reasons.append("all pre-set criteria met")
+            else:
+                verdict = "reject"
+                reasons.append(
+                    "statistically significant effect in the opposite direction "
+                    "to the hypothesis"
+                )
+        else:
+            verdict = "inconclusive"
+            reasons.append(
+                "insufficient evidence to support or reject the hypothesis"
+    )
 
         return self._pack(analysis, verdict, issues, reasons, n_tests)
 
