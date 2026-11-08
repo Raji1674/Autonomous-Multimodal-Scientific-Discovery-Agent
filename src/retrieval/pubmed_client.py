@@ -57,9 +57,12 @@ def parse_pubmed_xml(xml_bytes: bytes | str) -> list[Paper]:
             if name:
                 authors.append(name)
         doi = None
+        pmcid = None
         for aid in art.findall("PubmedData/ArticleIdList/ArticleId"):
             if aid.get("IdType") == "doi":
                 doi = _text(aid)
+            elif aid.get("IdType") == "pmc":
+                pmcid = _text(aid)
         types = [_text(t) for t in article.findall("PublicationTypeList/PublicationType")]
         if "Preprint" in types:
             status = "preprint"
@@ -70,7 +73,9 @@ def parse_pubmed_xml(xml_bytes: bytes | str) -> list[Paper]:
         papers.append(Paper(
             paper_id=f"pmid:{pmid}", source="pubmed", title=_text(article.find("ArticleTitle")),
             authors=authors, abstract=clean_abstract(" ".join(parts)), date=_parse_date(article),
-            doi=doi, pdf_url=None, journal=_text(article.find("Journal/Title")) or None,
+            doi=doi,
+            pdf_url=(f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/pdf/" if pmcid else None),
+            journal=_text(article.find("Journal/Title")) or None,
             categories=types, publication_status=status))
     return papers
 

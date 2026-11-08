@@ -24,6 +24,7 @@ class FailureState(str, Enum):
 
 class ResearchState(TypedDict, total=False):
     run_id: str
+    workflow_thread_id: str
     research_question: str
     dataset_path: str
     target_column: str

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ModelConfig(BaseModel):
@@ -21,11 +21,14 @@ class RetrievalConfig(BaseModel):
     chunk_overlap: int = 150
     embedding_model: str = "all-MiniLM-L6-v2"
     chroma_path: str = "data/chroma"
+    download_pdfs: bool = False
+    max_pdf_papers: int = Field(default=3, ge=0)
 
 
 class AgentsConfig(BaseModel):
     max_hypothesis_retries: int = 2
     max_revisions: int = 2
+    checkpoint_path: str = "data/checkpoints/research.sqlite"
 
 
 class AppConfig(BaseModel):

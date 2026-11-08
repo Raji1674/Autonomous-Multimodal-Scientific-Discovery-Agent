@@ -20,6 +20,7 @@ CLASSIFICATION_SYSTEM = (
     "Use dataset iris, wine, breast_cancer, digits, or uploaded_csv. "
     "Use task_type classification, a classification model, and metric accuracy or f1_macro. "
     "For uploaded_csv, use dataset uploaded_csv. "
+    "Use only these canonical model identifiers: logreg, svm, knn, tree, random_forest. "
 )
 
 REGRESSION_SYSTEM = (
@@ -34,6 +35,24 @@ REGRESSION_SYSTEM = (
     "For mae and rmse, expected_direction must be lower when improvement means "
     "smaller prediction error. For r2, expected_direction must be higher. "
 )
+
+
+def normalize_model_name(model: str) -> str:
+    """Convert common sklearn class names to project model identifiers."""
+
+    aliases = {
+        "LogisticRegression": "logreg",
+        "SVC": "svm",
+        "KNeighborsClassifier": "knn",
+        "DecisionTreeClassifier": "tree",
+        "RandomForestClassifier": "random_forest",
+        "LinearRegression": "linear_regression",
+        "DecisionTreeRegressor": "decision_tree_regressor",
+        "RandomForestRegressor": "random_forest_regressor",
+        "Ridge": "ridge",
+    }
+
+    return aliases.get(model.strip(), model.strip())
 
 
 class ExperimentDesigner(BaseAgent):
@@ -146,6 +165,9 @@ class ExperimentDesigner(BaseAgent):
             data = complete_json(self.llm, system, prompt)
 
             try:
+                if isinstance(data.get("model"), str):
+                    data["model"] = normalize_model_name(data["model"])
+
                 if is_uploaded_csv:
                     data["dataset"] = "uploaded_csv"
                     data["task_type"] = task_type

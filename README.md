@@ -50,6 +50,12 @@ findings into a human-readable research report — all driven by a multi-agent L
 - **Tech**: LangChain / AutoGen, LangGraph, prompt engineering, structured outputs, agent memory
 - **Branch**: `feature/member1-orchestration`
 
+The production workflow in `src/workflow` runs the reviewer, hypothesis generator,
+experiment designer, sandbox executor, statistical critic, and synthesis agent in
+order. Critic-authorized revisions are bounded by `max_revisions`. Each run uses its
+run ID as the LangGraph checkpoint thread ID; the SQLite checkpoint database is
+stored at `data/checkpoints/research.sqlite` by default and is excluded from Git.
+
 ---
 
 ### 👩‍💻 Member 2 — Data + RAG Engineer
@@ -67,6 +73,14 @@ findings into a human-readable research report — all driven by a multi-agent L
 arXiv / PubMed APIs  →  Data Ingestion  →  PDF Processing
     →  Chunking  →  Embeddings  →  Vector DB  →  RAG Retrieval
 ```
+
+PDF text extraction is available for arXiv and PubMed Central open-access PDFs.
+It is disabled by default because downloads add network traffic and processing time.
+Set `download_pdfs: true` in `configs/retrieval.yaml` to enable it. Downloads are
+restricted to approved scholarly hosts, HTTPS, 20 MB per file, 300 pages, and three
+PDFs per ingestion run by default; papers
+that cannot be parsed still fall back to their abstract. Scanned image-only PDFs need
+OCR and are currently indexed only when they contain extractable text.
 
 ---
 
@@ -201,7 +215,7 @@ pip install -r requirements.txt
 ```bash
 copy .env.example .env        # Windows
 cp .env.example .env          # macOS / Linux
-# Open .env and fill in ENTREZ_EMAIL (required for PubMed)
+# Open .env and set NCBI_EMAIL (required for PubMed)
 ```
 
 ---

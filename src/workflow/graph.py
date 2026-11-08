@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
@@ -172,6 +173,7 @@ def build_graph(
     saver = None
 
     if checkpoint_path:
+        Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(
             checkpoint_path,
             check_same_thread=False,
@@ -184,9 +186,9 @@ def build_graph(
     )
 
 
-def new_config():
+def new_config(thread_id: str | None = None):
     return {
         "configurable": {
-            "thread_id": f"run-{uuid.uuid4().hex[:8]}"
+            "thread_id": thread_id or f"run-{uuid.uuid4().hex[:8]}"
         }
     }
