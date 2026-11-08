@@ -21,6 +21,17 @@ CLASSIFICATION_SYSTEM = (
     "Use task_type classification, a classification model, and metric accuracy or f1_macro. "
     "For uploaded_csv, use dataset uploaded_csv. "
     "Use only these canonical model identifiers: logreg, svm, knn, tree, random_forest. "
+    "IMPORTANT: independent_variable must be an allowed model hyperparameter, "
+    "not a dataset feature or column. "
+    "baseline_value and treatment_value must be actual values for that hyperparameter. "
+    "For numeric hyperparameters, use numeric JSON values. "
+    "For boolean hyperparameters, use true or false. "
+    "The baseline and treatment values must be different. "
+    "expected_direction MUST be exactly 'higher' or 'lower'. Never use 'increase' or 'decrease'. "
+    "fixed_params MUST be an empty JSON object: {}. "
+    "Do not include weights or any other additional fixed parameters. "
+    "Example: model='random_forest', independent_variable='n_estimators', "
+    "baseline_value=100, treatment_value=200, expected_direction='higher', fixed_params={}. "
 )
 
 REGRESSION_SYSTEM = (
@@ -32,10 +43,20 @@ REGRESSION_SYSTEM = (
     "Allowed regression models: linear_regression, decision_tree_regressor, "
     "random_forest_regressor, ridge. "
     "Allowed metrics: mae, rmse, r2. "
-    "For mae and rmse, expected_direction must be lower when improvement means "
-    "smaller prediction error. For r2, expected_direction must be higher. "
+    "For mae and rmse, expected_direction must be 'lower'. "
+    "For r2, expected_direction must be 'higher'. "
+    "IMPORTANT: independent_variable must be an allowed model hyperparameter, "
+    "not a dataset feature or column. "
+    "baseline_value and treatment_value must be actual values for that hyperparameter. "
+    "For numeric hyperparameters, use numeric JSON values. "
+    "For boolean hyperparameters, use true or false. "
+    "The baseline and treatment values must be different. "
+    "expected_direction MUST be exactly 'higher' or 'lower'. Never use 'increase' or 'decrease'. "
+    "fixed_params MUST be an empty JSON object: {}. "
+    "Do not include weights or any other additional fixed parameters. "
+    "Example: model='decision_tree_regressor', independent_variable='max_depth', "
+    "baseline_value=5, treatment_value=10, expected_direction='lower', fixed_params={}. "
 )
-
 
 def normalize_model_name(model: str) -> str:
     """Convert common sklearn class names to project model identifiers."""

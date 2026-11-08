@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Autonomous Scientific Discovery</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>Autonomous Scientific Discovery</h1>
@@ -188,10 +189,139 @@
         {% endif %}
 
         {% if research_result.results %}
-            <h3>Experiment Results</h3>
-            <pre style="white-space: pre-wrap;">{{ research_result.results | tojson(indent=2) }}</pre>
-        {% endif %}
+    <h3>Experiment Results</h3>
+
+    <pre style="white-space: pre-wrap;">{{ research_result.results | tojson(indent=2) }}</pre>
+
+    {% if research_result.results.result_label == "executed"
+          and research_result.results.baseline
+          and research_result.results.treatment %}
+
+        <h3>1. Baseline vs Treatment</h3>
+        <canvas id="comparisonChart"></canvas>
+
+        <h3>2. Per-Seed Performance</h3>
+        <canvas id="seedChart"></canvas>
+
+        <h3>3. Training vs Testing Performance</h3>
+        <canvas id="trainingChart"></canvas>
+
+    {% endif %}
+{% endif %}
     {% endif %}
 
+{% if research_result and research_result.results and research_result.results.result_label == "executed" %}
+<script>
+    const experiment = {{ research_result.results | tojson }};
+
+    function average(values) {
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+
+    const baselineMean = average(experiment.baseline);
+    const treatmentMean = average(experiment.treatment);
+    const metric = experiment.metric || "Score";
+
+    // Chart 1: Average baseline vs treatment
+    new Chart(document.getElementById("comparisonChart"), {
+        type: "bar",
+        data: {
+            labels: ["Baseline", "Treatment"],
+            datasets: [{
+                label: "Average " + metric,
+                data: [baselineMean, treatmentMean]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Average Test Performance"
+                }
+            }
+        }
+    });
+
+    // Chart 2: Performance across random seeds
+    const seeds = experiment.seeds ||
+        experiment.baseline.map((_, index) => index);
+
+    new Chart(document.getElementById("seedChart"), {
+        type: "line",
+        data: {
+            labels: seeds,
+            datasets: [
+                {
+                    label: "Baseline",
+                    data: experiment.baseline,
+                    tension: 0.2
+                },
+                {
+                    label: "Treatment",
+                    data: experiment.treatment,
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Per-Seed Test Performance"
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: "Random Seed"
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: metric
+                    }
+                }
+            }
+        }
+    });
+
+    // Chart 3: Training vs testing performance
+    if (experiment.baseline_train && experiment.treatment_train) {
+        new Chart(document.getElementById("trainingChart"), {
+            type: "bar",
+            data: {
+                labels: [
+                    "Baseline Training",
+                    "Baseline Testing",
+                    "Treatment Training",
+                    "Treatment Testing"
+                ],
+                datasets: [{
+                    label: metric,
+                    data: [
+                        average(experiment.baseline_train),
+                        baselineMean,
+                        average(experiment.treatment_train),
+                        treatmentMean
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: "Training vs Testing Performance"
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endif %}
 </body>
 </html>
