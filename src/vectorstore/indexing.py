@@ -21,14 +21,28 @@ class IndexReport:
 
 
 def index_papers(papers: list[Paper], store: VectorStore, chunk_size: int = 1000,
-                 chunk_overlap: int = 150) -> IndexReport:
+                 chunk_overlap: int = 150, pdf_extractor=None,
+                 max_pdf_papers: int = 3) -> IndexReport:
     """Chunk, embed (inside the store) and upsert. Citation keys are unique within the batch."""
     report = IndexReport(papers_in=len(papers))
     used: set[str] = set()
+    pdfs_processed = 0
     for paper in papers:
         try:
+            if (pdf_extractor is not None and paper.pdf_url and not paper.full_text.strip()
+                    and pdfs_processed < max_pdf_papers):
+                pdfs_processed += 1
+                try:
+                    paper = paper.model_copy(update={"full_text": pdf_extractor.extract(paper.pdf_url)})
+                except Exception as exc:  # Keep indexing the abstract when a PDF is unavailable.
+                    report.failures.append({
+                        "paper_id": paper.paper_id,
+                        "failure_state": FailureState.PAPER_PARSE_FAILED.value,
+                        "error": str(exc),
+                    })
             if not paper.abstract.strip():
-                continue  # nothing to index; metadata-only records are skipped
+                if not paper.full_text.strip():
+                    continue  # metadata-only records are skipped
             key = make_citation_key(paper, used)
             used.add(key)
             chunks = chunk_paper(paper, chunk_size, chunk_overlap, citation_key=key)

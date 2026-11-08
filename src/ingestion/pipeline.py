@@ -25,7 +25,8 @@ class IngestionReport:
 
 
 def run_ingestion(query: str, store: VectorStore, arxiv_client=None, pubmed_client=None,
-                  max_per_source: int = 50, categories: list[str] | None = None) -> IngestionReport:
+                  max_per_source: int = 50, categories: list[str] | None = None,
+                  pdf_extractor=None, max_pdf_papers: int = 3) -> IngestionReport:
     """One source failing never stops the other; failures are recorded, not raised."""
     report = IngestionReport()
     papers: list[Paper] = []
@@ -43,7 +44,8 @@ def run_ingestion(query: str, store: VectorStore, arxiv_client=None, pubmed_clie
             log_event(log, "ingestion", f"fetch_{name}", "error", error=str(exc))
     unique = dedupe(papers)
     report.after_dedupe = len(unique)
-    idx = index_papers(unique, store)
+    idx = index_papers(unique, store, pdf_extractor=pdf_extractor,
+                       max_pdf_papers=max_pdf_papers)
     report.chunks_written = idx.chunks_written
     report.failures.extend(idx.failures)
     log_event(log, "ingestion", "run", "ok", fetched=report.fetched, unique=report.after_dedupe,

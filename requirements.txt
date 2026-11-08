@@ -17,3 +17,4 @@ docker>=7.0
 flask>=3.0
 
 scipy>=1.10
+pymupdf>=1.24

@@ -20,6 +20,7 @@ class Paper(BaseModel):
     title: str
     authors: list[str] = Field(default_factory=list)
     abstract: str = ""
+    full_text: str = ""
     date: str = ""
     doi: str | None = None
     pdf_url: str | None = None

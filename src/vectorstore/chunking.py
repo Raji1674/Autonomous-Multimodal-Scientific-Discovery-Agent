@@ -28,9 +28,11 @@ def split_text(text: str, size: int = 1000, overlap: int = 150) -> list[str]:
 
 def chunk_paper(paper: Paper, size: int = 1000, overlap: int = 150,
                 citation_key: str | None = None) -> list[Chunk]:
-    """Chunk 'title. abstract' and attach metadata used for reliable citations."""
+    """Chunk available paper text and attach citation metadata."""
     key = citation_key or make_citation_key(paper)
-    pieces = split_text(f"{paper.title}. {paper.abstract}".strip(), size, overlap)
+    source_text = paper.full_text.strip() or paper.abstract.strip()
+    text = "\n\n".join(part for part in (paper.title.strip(), source_text) if part)
+    pieces = split_text(text, size, overlap)
     year = paper.date[:4] if paper.date[:4].isdigit() else ""
     return [
         Chunk(
