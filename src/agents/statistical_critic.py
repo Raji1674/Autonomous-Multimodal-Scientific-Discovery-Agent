@@ -215,14 +215,15 @@ class StatisticalCritic:
             reasons.append(f"|effect size| {abs(effect_size):.2f} is below {self.min_effect}")
         if significant and ci_excludes_zero and not direction_ok:
             reasons.append("significant effect in the OPPOSITE direction to the hypothesis")
-
-        verdict = (
-            "accept"
-            if significant and ci_excludes_zero and practical_ok and effect_ok and direction_ok
-            else "reject"
-        )
-        if verdict == "accept":
-            reasons.append("all pre-set criteria met")
+        if significant and ci_excludes_zero and practical_ok and effect_ok:
+            if direction_ok:
+                verdict = "accept"
+                reasons.append("all pre-set criteria met")
+            else:
+                verdict = "reject"
+                reasons.append("significant effect in the opposite direction to the hypothesis")
+        else:
+            verdict = "inconclusive"
 
         return self._pack(analysis, verdict, issues, reasons, n_tests)
 

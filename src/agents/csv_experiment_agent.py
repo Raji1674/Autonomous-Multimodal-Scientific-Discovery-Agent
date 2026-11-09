@@ -7,7 +7,6 @@ from pathlib import Path
 
 from src.agents.base import BaseAgent
 from src.experiments.task_detector import detect_task
-from src.experiments.csv_trainer import train_all_models
 from src.experiments.regression_trainer import train_regression_models
 from src.experiments.clustering_trainer import train_clustering_models
 from src.experiments.sandbox_csv_runner import run_sandbox_csv_experiment
@@ -19,6 +18,8 @@ class CSVExperimentAgent(BaseAgent):
     failure_on_error = FailureState.EXECUTION_FAILED
 
     def run(self, state: ResearchState) -> dict:
+        """Detect the task, execute the experiment and return validated results."""
+
         dataset_path = state.get("dataset_path")
         target_column = state.get("target_column")
         task_override = state.get("task_override")
@@ -28,7 +29,9 @@ class CSVExperimentAgent(BaseAgent):
             return self._failure("Dataset file is missing or invalid.")
 
         if not isinstance(hypothesis, dict):
-            return self._failure("Selected hypothesis must be a dictionary.")
+            return self._failure(
+                "Selected hypothesis must be a dictionary."
+            )
 
         detection = detect_task(
             file_path=dataset_path,
@@ -36,26 +39,63 @@ class CSVExperimentAgent(BaseAgent):
             task_override=task_override,
         )
 
+        if not isinstance(detection, dict):
+            return self._failure(
+                "Task detector returned an invalid result: "
+                f"{type(detection).__name__}"
+            )
+
         if not detection.get("success"):
-            return self._failure(detection.get("error", "Task detection failed."))
+            return self._failure(
+                detection.get("error", "Task detection failed.")
+            )
 
-        task = detection["task"]
+        task = detection.get("task")
 
-        # A missing target means unsupervised clustering.
+        if task not in {"classification", "regression", "clustering"}:
+            return self._failure(
+                f"Unsupported or missing detected task: {task}"
+            )
+
         if task != "clustering" and not target_column:
-            return self._failure("Target column is required for supervised learning.")
+            return self._failure(
+                "Target column is required for supervised learning."
+            )
 
-        if task == "classification":
-            result = self._run_classification(
-                dataset_path, target_column, state
+        # Execute the selected experiment.
+        try:
+            if task == "classification":
+                result = self._run_classification(
+                    dataset_path,
+                    target_column,
+                    state,
+                )
+
+            elif task == "regression":
+                result = train_regression_models(
+                    file_path=dataset_path,
+                    target_column=target_column,
+                )
+
+            else:
+                result = train_clustering_models(
+                    file_path=dataset_path
+                )
+
+        except Exception as exc:
+            return self._failure(
+                f"{task.title()} experiment raised "
+                f"{type(exc).__name__}: {exc}",
+                task=task,
             )
-        elif task == "regression":
-            result = train_regression_models(
-                file_path=dataset_path,
-                target_column=target_column,
+
+        # Validate the trainer response before accessing dictionary fields.
+        if not isinstance(result, dict):
+            return self._failure(
+                f"{task.title()} experiment returned an invalid result: "
+                f"{type(result).__name__}",
+                task=task,
             )
-        else:
-            result = train_clustering_models(file_path=dataset_path)
 
         if not result.get("success"):
             return self._failure(
@@ -88,10 +128,13 @@ class CSVExperimentAgent(BaseAgent):
             "failure_state": FailureState.EXECUTION_FAILED.value,
             "error": message,
         }
+
         if task:
             update["detected_task"] = task
+
         if experiment_results is not None:
             update["experiment_results"] = experiment_results
+
         return update
 
     @staticmethod
@@ -100,7 +143,8 @@ class CSVExperimentAgent(BaseAgent):
         target_column: str,
         state: ResearchState,
     ) -> dict:
-        # Preserve the existing Docker-isolated paired experiment and critic.
+        """Run the paired Random Forest experiment inside Docker."""
+
         return run_sandbox_csv_experiment(
             file_path=dataset_path,
             target_column=target_column,

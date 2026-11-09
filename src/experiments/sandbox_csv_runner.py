@@ -28,8 +28,14 @@ def _validate_params(params: dict, name: str) -> dict:
 
     for key, value in params.items():
         if key == "n_estimators":
-            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 500:
-                raise ValueError("n_estimators must be an integer between 1 and 500")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not 1 <= value <= 500
+            ):
+                raise ValueError(
+                    "n_estimators must be an integer between 1 and 500"
+                )
 
         if key == "max_depth":
             if value is not None and (
@@ -37,7 +43,9 @@ def _validate_params(params: dict, name: str) -> dict:
                 or not isinstance(value, int)
                 or not 1 <= value <= 100
             ):
-                raise ValueError("max_depth must be None or an integer between 1 and 100")
+                raise ValueError(
+                    "max_depth must be None or an integer between 1 and 100"
+                )
 
         result[key] = value
 
@@ -62,12 +70,18 @@ def run_sandbox_csv_experiment(
     allowed_root = Path("data/downloaded").resolve()
 
     if not path.is_relative_to(allowed_root):
-        raise ValueError("Only datasets inside data/downloaded are permitted")
+        raise ValueError(
+            "Only datasets inside data/downloaded are permitted"
+        )
 
     if not path.is_file() or path.suffix.lower() != ".csv":
         raise ValueError("A valid CSV dataset is required")
 
-    if not isinstance(n_seeds, int) or isinstance(n_seeds, bool) or not 2 <= n_seeds <= 100:
+    if (
+        not isinstance(n_seeds, int)
+        or isinstance(n_seeds, bool)
+        or not 2 <= n_seeds <= 100
+    ):
         raise ValueError("n_seeds must be between 2 and 100")
 
     if (
@@ -81,7 +95,11 @@ def run_sandbox_csv_experiment(
     if expected_direction not in {"higher", "lower"}:
         raise ValueError("expected_direction must be higher or lower")
 
-    if not isinstance(n_tests, int) or isinstance(n_tests, bool) or n_tests < 1:
+    if (
+        not isinstance(n_tests, int)
+        or isinstance(n_tests, bool)
+        or n_tests < 1
+    ):
         raise ValueError("n_tests must be a positive integer")
 
     validation = validate_csv_dataset(path, target_column)
@@ -94,10 +112,14 @@ def run_sandbox_csv_experiment(
         }
 
     base_params = {"n_estimators": 100}
-    base_params.update(_validate_params(baseline_params or {}, "baseline_params"))
+    base_params.update(
+        _validate_params(baseline_params or {}, "baseline_params")
+    )
 
     treat_params = {"n_estimators": 200}
-    treat_params.update(_validate_params(treatment_params or {}, "treatment_params"))
+    treat_params.update(
+        _validate_params(treatment_params or {}, "treatment_params")
+    )
 
     if base_params == treat_params:
         return {
@@ -137,7 +159,9 @@ X = df.drop(columns=[config["target_column"]])
 y = df[config["target_column"]]
 
 if y.nunique() < 2 or y.value_counts().min() < 2:
-    raise ValueError("Insufficient target classes for stratified evaluation")
+    raise ValueError(
+        "Insufficient target classes for stratified evaluation"
+    )
 
 numeric = X.select_dtypes(include="number").columns.tolist()
 categorical = X.select_dtypes(exclude="number").columns.tolist()
@@ -170,6 +194,7 @@ last_train = None
 last_test = None
 
 for seed in range(config["n_seeds"]):
+
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -185,6 +210,7 @@ for seed in range(config["n_seeds"]):
         (config["baseline_params"], baseline_scores),
         (config["treatment_params"], treatment_scores),
     ):
+
         model = Pipeline([
             ("preprocessing", ColumnTransformer(transformers)),
             ("classifier", RandomForestClassifier(
@@ -210,52 +236,72 @@ result = {
 print(json.dumps(result, allow_nan=False))
 '''.replace("CONFIG_JSON", repr(config_json))
 
+    # Execute experiment inside Docker.
     try:
-        docker_result = execute_python(script, dataset_path=path)
+        docker_result = execute_python(
+            script,
+            dataset_path=path,
+        )
     except SandboxExecutionError as exc:
         return {
             "success": False,
             "stage": "sandbox",
             "issues": [str(exc)],
         }
+
     if docker_result.get("output_truncated"):
         return {
             "success": False,
             "stage": "result_validation",
-            "issues": ["Docker output was truncated; experiment result cannot be trusted"],
+            "issues": [
+                "Docker output was truncated; experiment result cannot be trusted"
+            ],
         }
 
-    if docker_result["result_label"] != "executed":
+    if docker_result.get("result_label") != "executed":
         return {
             "success": False,
             "stage": "sandbox_execution",
-            "issues": [docker_result["output"][-2000:]],
+            "issues": [
+                str(docker_result.get("output", ""))[-2000:]
+            ],
         }
 
+    # Parse Docker output.
     try:
-        result = json.loads(docker_result["output"].strip().splitlines()[-1])
-    except (json.JSONDecodeError, IndexError):
+        output = docker_result.get("output", "").strip()
+        result = json.loads(output.splitlines()[-1])
+    except (json.JSONDecodeError, IndexError, AttributeError):
         return {
             "success": False,
             "stage": "result_parsing",
-            "issues": ["Docker did not return valid experiment JSON"],
+            "issues": [
+                "Docker did not return valid experiment JSON"
+            ],
         }
 
+    # Validate execution status.
     if result.get("result_label") != "executed":
         return {
             "success": False,
             "stage": "result_validation",
-            "issues": ["Experiment result is not labelled executed"],
+            "issues": [
+                "Experiment result is not labelled executed"
+            ],
         }
-        # Validate accuracy scores returned by the Docker container.
+
+    # Validate baseline and treatment accuracy scores.
     for key in ("baseline", "treatment"):
+
         scores = result.get(key)
 
         if not isinstance(scores, list) or len(scores) != n_seeds:
             return {
                 "success": False,
                 "stage": "result_validation",
-                "issues": [f"Invalid {key} score array"],
+                "issues": [
+                    f"Invalid {key} score array"
+                ],
             }
 
         if any(
@@ -268,31 +314,40 @@ print(json.dumps(result, allow_nan=False))
             return {
                 "success": False,
                 "stage": "result_validation",
-                "issues": [f"{key} scores must be finite accuracy values between 0 and 1"],
+                "issues": [
+                    f"{key} scores must be finite accuracy values between 0 and 1"
+                ],
             }
 
+    # Validate train and test sizes.
     for key in ("n_train", "n_test"):
+
         value = result.get(key)
 
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or value <= 0
+        ):
             return {
                 "success": False,
                 "stage": "result_validation",
-                "issues": [f"{key} must be a positive integer"],
+                "issues": [
+                    f"{key} must be a positive integer"
+                ],
             }
 
-    if (
-        not isinstance(result.get("baseline"), list)
-        or not isinstance(result.get("treatment"), list)
-        or len(result["baseline"]) != n_seeds
-        or len(result["treatment"]) != n_seeds
-    ):
+    # Validate paired experiment configuration.
+    if result.get("n_seeds") != n_seeds:
         return {
             "success": False,
             "stage": "result_validation",
-            "issues": ["Invalid paired score arrays returned by Docker"],
+            "issues": [
+                "Returned seed count does not match requested seed count"
+            ],
         }
 
+    # Statistical evaluation.
     try:
         critic = StatisticalCritic().evaluate_scores(
             result,
@@ -313,4 +368,14 @@ print(json.dumps(result, allow_nan=False))
         "validation": validation,
         "experiment": result,
         "critic": critic,
+        "experiment_protocol": {
+            "algorithm": "RandomForestClassifier",
+            "baseline_params": base_params,
+            "treatment_params": treat_params,
+            "metric": "accuracy",
+            "n_seeds": n_seeds,
+            "test_size": float(test_size),
+            "n_train": result["n_train"],
+            "n_test": result["n_test"],
+        },
     }
