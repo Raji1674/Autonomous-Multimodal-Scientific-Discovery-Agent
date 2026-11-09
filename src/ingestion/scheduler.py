@@ -4,6 +4,12 @@ from __future__ import annotations
 import time
 
 import schedule
+import logging
+import time
+
+import schedule
+
+logger = logging.getLogger(__name__)
 
 from src.ingestion.pipeline import run_ingestion
 from src.vectorstore.base import VectorStore
@@ -12,7 +18,14 @@ from src.vectorstore.base import VectorStore
 def make_job(store: VectorStore, queries: list[str], max_per_source: int = 50):
     def job() -> None:
         for q in queries:
-            run_ingestion(q, store, max_per_source=max_per_source)
+            try:
+                run_ingestion(q, store, max_per_source=max_per_source)
+            except Exception:
+                logger.exception(
+                    "Ingestion failed for query %r. Continuing with next query.",
+                    q,
+                )
+
     return job
 
 

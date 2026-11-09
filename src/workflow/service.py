@@ -67,6 +67,7 @@ class ResearchService:
             self.store,
             self.llm,
             top_k=self.cfg.retrieval.top_k,
+            peer_reviewed_only=True,
         )
         hypothesis = HypothesisGenerator(
             self.llm,

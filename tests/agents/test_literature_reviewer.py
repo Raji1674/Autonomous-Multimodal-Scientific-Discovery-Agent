@@ -27,10 +27,22 @@ class FakeStore:
         self.hits = hits
         self.last_query = None
         self.last_k = None
+        self.last_where = None
 
-    def query(self, query, k):
+    def query(self, query, k, where=None):
         self.last_query = query
         self.last_k = k
+        self.last_where = where
+
+        if where:
+            return [
+                hit for hit in self.hits
+                if all(
+                    hit.chunk.metadata.get(key) == value
+                    for key, value in where.items()
+                )
+            ]
+
         return self.hits
 
 
@@ -131,16 +143,88 @@ def test_literature_reviewer_handles_duplicate_citation_keys():
         )
     )
 
-    store = FakeStore([first, second])
+    class FakeStore:
+        def __init__(self, hits):
+            self.hits = hits
+            self.last_query = None
+            self.last_k = None
+            self.last_where = None
+
+        def query(self, query, k, where=None):
+            self.last_query = query
+            self.last_k = k
+            self.last_where = where
+
+            if where:
+                return [
+                    hit for hit in self.hits
+                    if all(
+                        hit.chunk.metadata.get(key) == value
+                        for key, value in where.items()
+                    )
+                ]
+
+            return self.hits
+
+def test_peer_reviewed_mode_excludes_preprints():
+    preprint = sample_hit()
+
+    peer_reviewed = FakeHit(
+        FakeChunk(
+            paper_id="paper-003",
+            text="Peer-reviewed study found a significant relationship.",
+            metadata={
+                "citation_key": "jones2025",
+                "title": "Published Student Performance Study",
+                "authors": "Jones et al.",
+                "year": 2025,
+                "source": "PubMed",
+                "publication_status": "peer_reviewed",
+            },
+        )
+    )
+
+    store = FakeStore([preprint, peer_reviewed])
     llm = FakeLLM()
-    reviewer = LiteratureReviewer(store=store, llm=llm)
+
+    reviewer = LiteratureReviewer(
+        store=store,
+        llm=llm,
+        top_k=5,
+        peer_reviewed_only=True,
+    )
+
+    result = reviewer({
+        "research_question": "How does study time affect student performance?"
+    })
+
+    assert store.last_where == {
+        "publication_status": "peer_reviewed"
+    }
+    assert len(result["literature"]) == 1
+    assert result["literature"][0]["paper_id"] == "paper-003"
+    assert "jones2025" in result["citations"]
+    assert "smith2024" not in result["citations"]
+    assert "peer-reviewed sources" in llm.last_system
+
+
+def test_peer_reviewed_mode_fails_when_only_preprints_exist():
+    store = FakeStore([sample_hit()])
+    llm = FakeLLM()
+
+    reviewer = LiteratureReviewer(
+        store=store,
+        llm=llm,
+        peer_reviewed_only=True,
+    )
 
     result = reviewer({
         "research_question": "Predict student performance"
     })
 
-    assert "smith2024" in result["citations"]
-    assert "smith2024_paper-002" in result["citations"]
-    assert len(result["citations"]) == 2
-    assert "[smith2024]" in llm.last_user
-    assert "[smith2024_paper-002]" in llm.last_user
+    assert store.last_where == {
+        "publication_status": "peer_reviewed"
+    }
+    assert result["failure_state"] == FailureState.RETRIEVAL_FAILED.value
+    assert "no evidence retrieved" in result["error"]
+    assert llm.last_user is None
