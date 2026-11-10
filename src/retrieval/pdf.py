@@ -73,15 +73,32 @@ class PdfTextExtractor:
                 response.close()
         raise PDFProcessingError("PDF server redirected too many times")
 
-    def extract(self, url: str) -> str:
-        """Extract page text, stopping at the configured page limit."""
+
+    def extract_with_content(self, url: str) -> tuple[str, bytes]:
+        """Download a PDF once and return its extracted text and original bytes."""
         content = self.download(url)
+
         try:
             with pymupdf.open(stream=content, filetype="pdf") as document:
-                pages = [page.get_text("text") for page in document[:self.max_pages]]
-        except Exception as exc:  # noqa: BLE001 - normalize parser errors at this boundary
-            raise PDFProcessingError(f"Could not parse downloaded PDF: {exc}") from exc
-        text = "\n\n".join(page.strip() for page in pages if page.strip())
+                pages = [
+                    page.get_text("text")
+                    for page in document[:self.max_pages]
+                ]
+        except Exception as exc:  # noqa: BLE001
+            raise PDFProcessingError(
+                f"Could not parse downloaded PDF: {exc}"
+            ) from exc
+
+        text = "\n\n".join(
+            page.strip() for page in pages if page.strip()
+        )
+
         if not text:
             raise PDFProcessingError("PDF contains no extractable text")
+
+        return text, content
+
+    def extract(self, url: str) -> str:
+        """Extract page text, preserving the existing public interface."""
+        text, _ = self.extract_with_content(url)
         return text

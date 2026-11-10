@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-
+import base64
 from src.llm.client import LLMError
 from src.llm.providers import GeminiClient, make_client
 from src.utils.config import ModelConfig
@@ -133,3 +133,47 @@ def test_make_client_rejects_unknown_provider():
 
     with pytest.raises(ValueError, match="Unknown provider"):
         make_client(config)
+
+
+def test_gemini_describes_image():
+    sdk = make_fake_sdk("A bar chart comparing model accuracy.")
+    client = GeminiClient(
+        api_key="test-key",
+        model="gemini-3.5-flash-lite",
+        client=sdk,
+    )
+
+    image = b"fake-png-image"
+
+    result = client.describe_image(
+        system="You are a scientific research assistant.",
+        user="Describe this chart.",
+        image_bytes=image,
+        mime_type="image/png",
+    )
+
+    assert result == "A bar chart comparing model accuracy."
+
+    args = sdk.interactions.create.call_args.kwargs
+    assert args["model"] == "gemini-3.5-flash-lite"
+    assert args["input"][0]["type"] == "text"
+    assert args["input"][1]["type"] == "image"
+    assert args["input"][1]["data"] == base64.b64encode(image).decode("utf-8")
+    assert args["input"][1]["mime_type"] == "image/png"
+
+
+def test_gemini_image_rejects_empty_response():
+    sdk = make_fake_sdk("")
+    client = GeminiClient(
+        api_key="test-key",
+        model="gemini-3.5-flash-lite",
+        client=sdk,
+    )
+
+    with pytest.raises(LLMError, match="empty response"):
+        client.describe_image(
+            system="Describe images.",
+            user="Describe this figure.",
+            image_bytes=b"fake-image",
+            mime_type="image/png",
+        )

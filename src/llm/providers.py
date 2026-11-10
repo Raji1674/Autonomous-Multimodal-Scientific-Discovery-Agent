@@ -2,6 +2,7 @@
 """Production LLM providers using official Gemini SDK and compatible APIs."""
 from __future__ import annotations
 
+import base64
 import json
 import time
 from typing import Callable
@@ -102,6 +103,80 @@ class GeminiClient:
                 self._sleep(2 ** attempt)
 
         raise LLMError("Gemini request failed after retries")
+
+    def describe_image(
+        self,
+        system: str,
+        user: str,
+        *,
+        image_bytes: bytes,
+        mime_type: str = "image/png",
+    ) -> str:
+        """Interpret a scientific image using Gemini's vision capability."""
+        if not image_bytes:
+            raise LLMError("Image data cannot be empty")
+
+        if mime_type not in {
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+        }:
+            raise LLMError(f"Unsupported image MIME type: {mime_type}")
+
+        encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+        prompt = f"{system}\n\n{user}" if system else user
+
+        image_input = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image",
+                "data": encoded_image,
+                "mime_type": mime_type,
+            },
+        ]
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.client.interactions.create(
+                    model=self.model,
+                    input=image_input,
+                )
+
+                output = response.output_text
+                if not output:
+                    raise LLMError("Gemini returned an empty response")
+
+                self.calls.append({
+                    "model": self.model,
+                    "usage": {},
+                    "cost": 0.0,
+                })
+                return output
+
+            except LLMError:
+                raise
+            except Exception as exc:
+                message = str(exc).lower()
+                status = getattr(exc, "code", None)
+
+                retryable = (
+                    status in (429, 500, 502, 503, 504)
+                    or any(
+                        code in message
+                        for code in ("429", "500", "502", "503", "504", "timeout")
+                    )
+                )
+
+                if not retryable or attempt == self.max_retries:
+                    raise LLMError(
+                        f"Gemini image request failed: "
+                        f"{type(exc).__name__}: {exc}"
+                    ) from exc
+
+                self._sleep(2 ** attempt)
+
+        raise LLMError("Gemini image request failed after retries")
 
 
 class OpenAICompatClient:

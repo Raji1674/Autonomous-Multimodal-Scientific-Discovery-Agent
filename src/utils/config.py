@@ -23,6 +23,9 @@ class RetrievalConfig(BaseModel):
     chroma_path: str = "data/chroma"
     download_pdfs: bool = False
     max_pdf_papers: int = Field(default=3, ge=0)
+    extract_figures: bool = False
+    max_figures_per_pdf: int = Field(default=10, ge=0)
+    vision_enabled: bool = False
 
 
 class AgentsConfig(BaseModel):

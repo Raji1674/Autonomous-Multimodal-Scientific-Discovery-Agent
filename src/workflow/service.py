@@ -2,6 +2,7 @@
 """Production research service: ingestion -> agents -> research report."""
 from __future__ import annotations
 
+import logging
 import re
 
 from src.agents.literature_reviewer import LiteratureReviewer
@@ -22,7 +23,13 @@ from src.vectorstore.chroma_store import ChromaStore
 from src.workflow.graph import build_graph, new_config
 
 
-def find_excluded_columns(question: str, column_names: list[str]) -> list[str]:
+log = logging.getLogger(__name__)
+
+
+def find_excluded_columns(
+    question: str,
+    column_names: list[str],
+) -> list[str]:
     """Find dataset columns explicitly excluded in the research question."""
 
     pattern = (
@@ -54,9 +61,11 @@ class ResearchService:
 
         # Production LLM and persistent vector store.
         self.llm = make_client(self.cfg.models)
+
         embedder = SentenceTransformerEmbedder(
             self.cfg.retrieval.embedding_model
         )
+
         self.store = ChromaStore(
             self.cfg.retrieval.chroma_path,
             embedder,
@@ -69,19 +78,24 @@ class ResearchService:
             top_k=self.cfg.retrieval.top_k,
             peer_reviewed_only=True,
         )
+
         hypothesis = HypothesisGenerator(
             self.llm,
             max_retries=self.cfg.agents.max_hypothesis_retries,
         )
+
         designer = ExperimentDesigner(
             self.llm,
             max_retries=self.cfg.agents.max_hypothesis_retries,
         )
+
         executor = CodeExecutor()
+
         critic = StatisticalCriticAgent(
             critic=StatisticalCritic(),
             llm=self.llm,
         )
+
         synthesis = SynthesisAgent(self.llm)
 
         self.graph = build_graph(
@@ -140,6 +154,24 @@ class ResearchService:
                     "dataset_issues": validation.get("issues", []),
                 }
 
+        # Read multimodal settings safely.
+        extract_figures = getattr(
+            self.cfg.retrieval,
+            "extract_figures",
+            False,
+        )
+
+        vision_enabled = (
+            getattr(self.cfg.retrieval, "vision_enabled", False)
+            and callable(getattr(self.llm, "describe_image", None))
+        )
+
+        max_figures = getattr(
+            self.cfg.retrieval,
+            "max_figures_per_pdf",
+            10,
+        )
+
         # Fetch and index real literature from arXiv and PubMed.
         ingestion = run_ingestion(
             question,
@@ -147,28 +179,42 @@ class ResearchService:
             max_per_source=10,
             pdf_extractor=self._pdf_extractor(),
             max_pdf_papers=self.cfg.retrieval.max_pdf_papers,
+            figure_extractor=self._figure_extractor(),
+            vision_client=self.llm if vision_enabled else None,
+            extract_figures=extract_figures,
+            vision_enabled=vision_enabled,
+            max_figures_per_pdf=max_figures,
         )
 
         ingestion_details = {
             "fetched": ingestion.fetched,
             "after_dedupe": ingestion.after_dedupe,
             "chunks_written": ingestion.chunks_written,
+            "figures_extracted": getattr(
+                ingestion, "figures_extracted", 0
+            ),
+            "figures_described": getattr(
+                ingestion, "figures_described", 0
+            ),
             "failures": ingestion.failures,
         }
 
-        if ingestion.chunks_written <= 0:
+        if ingestion.chunks_written == 0:
             return {
                 "ok": False,
-                "error": "No new literature could be indexed for this question.",
+                "error": "No new literature was found for this research question.",
                 "ingestion": ingestion_details,
             }
 
-        run_config = new_config()
-        run_id = run_config["configurable"]["thread_id"]
+        # Use the same thread ID for the run and its state.
+        config = new_config()
+        run_id = config["configurable"]["thread_id"]
 
         initial_state = {
+            "question": question,
+            "dataset_path": dataset_path,
+            "target_column": target_column,
             "run_id": run_id,
-            "workflow_thread_id": run_id,
             "research_question": question,
         }
 
@@ -180,8 +226,6 @@ class ResearchService:
             )
 
             initial_state.update({
-                "dataset_path": dataset_path,
-                "target_column": target_column,
                 "dataset_task_type": validation.get("task_type"),
                 "dataset_columns": column_names,
                 "excluded_columns": excluded_columns,
@@ -190,26 +234,35 @@ class ResearchService:
         try:
             result = self.graph.invoke(
                 initial_state,
-                config=run_config,
+                config=config,
             )
         except Exception:
+            log.exception("Research workflow failed unexpectedly")
             return {
                 "ok": False,
                 "error": "The research workflow encountered an unexpected error.",
                 "ingestion": ingestion_details,
             }
 
-        failed = bool(result.get("failure_state"))
+        if result.get("failure_state"):
+            return {
+                "ok": False,
+                "error": result.get(
+                    "error",
+                    "Research workflow failed.",
+                ),
+                "failure_state": result["failure_state"],
+                "ingestion": ingestion_details,
+            }
 
         return {
-            "ok": not failed,
+            "ok": True,
             "run_id": run_id,
-            "error": result.get("error") if failed else None,
-            "failure_state": result.get("failure_state"),
             "report": result.get("final_report", ""),
             "citations": result.get("citations", {}),
             "verdict": result.get("verdict"),
             "results": result.get("experiment_results"),
+            "experiment_results": result.get("experiment_results"),
             "ingestion": ingestion_details,
         }
 
@@ -220,3 +273,17 @@ class ResearchService:
         from src.retrieval.pdf import PdfTextExtractor
 
         return PdfTextExtractor()
+
+    def _figure_extractor(self):
+        if not getattr(self.cfg.retrieval, "extract_figures", False):
+            return None
+
+        from src.retrieval.figures import PdfFigureExtractor
+
+        return PdfFigureExtractor(
+            max_figures=getattr(
+                self.cfg.retrieval,
+                "max_figures_per_pdf",
+                10,
+            )
+        )

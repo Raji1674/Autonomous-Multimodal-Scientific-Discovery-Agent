@@ -22,16 +22,38 @@ class IngestionReport:
     after_dedupe: int = 0
     chunks_written: int = 0
     failures: list[dict] = field(default_factory=list)
+    figures_extracted: int = 0
+    figures_described: int = 0
 
 
-def run_ingestion(query: str, store: VectorStore, arxiv_client=None, pubmed_client=None,
-                  max_per_source: int = 50, categories: list[str] | None = None,
-                  pdf_extractor=None, max_pdf_papers: int = 3) -> IngestionReport:
+def run_ingestion(
+    query: str,
+    store: VectorStore,
+    arxiv_client=None,
+    pubmed_client=None,
+    max_per_source: int = 50,
+    categories: list[str] | None = None,
+    pdf_extractor=None,
+    max_pdf_papers: int = 3,
+    figure_extractor=None,
+    vision_client=None,
+    extract_figures: bool = False,
+    vision_enabled: bool = False,
+    max_figures_per_pdf: int = 10,
+) -> IngestionReport:
     """One source failing never stops the other; failures are recorded, not raised."""
     report = IngestionReport()
     papers: list[Paper] = []
-    sources = {"arxiv": lambda: (arxiv_client or ArxivClient()).search(query, max_per_source, categories),
-               "pubmed": lambda: (pubmed_client or PubMedClient()).search(query, max_per_source)}
+
+    sources = {
+        "arxiv": lambda: (
+            arxiv_client or ArxivClient()
+        ).search(query, max_per_source, categories),
+        "pubmed": lambda: (
+            pubmed_client or PubMedClient()
+        ).search(query, max_per_source),
+    }
+
     for name, fetch in sources.items():
         try:
             got = fetch()
@@ -39,17 +61,44 @@ def run_ingestion(query: str, store: VectorStore, arxiv_client=None, pubmed_clie
             papers.extend(got)
         except LiteratureSearchError as exc:
             report.fetched[name] = 0
-            report.failures.append({"source": name, "failure_state": FailureState.LITERATURE_SEARCH_FAILED.value,
-                                    "error": str(exc)})
-            log_event(log, "ingestion", f"fetch_{name}", "error", error=str(exc))
+            report.failures.append({
+                "source": name,
+                "failure_state": FailureState.LITERATURE_SEARCH_FAILED.value,
+                "error": str(exc),
+            })
+            log_event(
+                log, "ingestion", f"fetch_{name}", "error",
+                error=str(exc),
+            )
+
     unique = dedupe(papers)
     report.after_dedupe = len(unique)
-    idx = index_papers(unique, store, pdf_extractor=pdf_extractor,
-                       max_pdf_papers=max_pdf_papers)
+
+    idx = index_papers(
+        unique,
+        store,
+        pdf_extractor=pdf_extractor,
+        max_pdf_papers=max_pdf_papers,
+        figure_extractor=figure_extractor,
+        vision_client=vision_client,
+        extract_figures=extract_figures,
+        vision_enabled=vision_enabled,
+        max_figures_per_pdf=max_figures_per_pdf,
+    )
+
     report.chunks_written = idx.chunks_written
+    report.figures_extracted = idx.figures_extracted
+    report.figures_described = idx.figures_described
     report.failures.extend(idx.failures)
-    log_event(log, "ingestion", "run", "ok", fetched=report.fetched, unique=report.after_dedupe,
-              chunks=report.chunks_written, failures=len(report.failures))
+
+    log_event(
+        log, "ingestion", "run", "ok",
+        fetched=report.fetched,
+        unique=report.after_dedupe,
+        chunks=report.chunks_written,
+        failures=len(report.failures),
+    )
+
     return report
 
 
@@ -62,8 +111,13 @@ def main() -> None:  # pragma: no cover - needs network and model download
     ap.add_argument("--query", required=True)
     ap.add_argument("--max", type=int, default=50)
     args = ap.parse_args()
+
     cfg = load_config()
-    store = ChromaStore(cfg.retrieval.chroma_path, SentenceTransformerEmbedder(cfg.retrieval.embedding_model))
+    store = ChromaStore(
+        cfg.retrieval.chroma_path,
+        SentenceTransformerEmbedder(cfg.retrieval.embedding_model),
+    )
+
     print(run_ingestion(args.query, store, max_per_source=args.max))
     print("chunks in store:", store.count())
 

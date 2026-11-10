@@ -132,3 +132,19 @@ def test_extract_respects_max_pages():
 
     assert "First page text" in result
     assert "Second page text" not in result
+
+
+def test_extract_with_content_returns_text_and_original_pdf():
+    extractor = PdfTextExtractor()
+    pdf_content = make_pdf("Scientific research test")
+
+    with patch.object(
+        extractor, "download", return_value=pdf_content
+    ) as download:
+        text, original_bytes = extractor.extract_with_content(
+            "https://arxiv.org/pdf/1234"
+        )
+
+    assert "Scientific research test" in text
+    assert original_bytes == pdf_content
+    download.assert_called_once_with("https://arxiv.org/pdf/1234")

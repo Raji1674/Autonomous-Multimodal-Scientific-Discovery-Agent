@@ -120,3 +120,109 @@ def test_index_papers_skips_papers_without_usable_text():
     assert report.papers_in == 1
     assert report.chunks_written == 0
     assert store.chunks == []
+
+def test_index_papers_indexes_figure_description():
+    store = FakeStore()
+
+    class FakePdfExtractor:
+        def extract_with_content(self, url):
+            return "Extracted paper text.", b"fake-pdf-bytes"
+
+    class FakeFigureExtractor:
+        def extract(self, pdf_bytes):
+            assert pdf_bytes == b"fake-pdf-bytes"
+
+            from src.retrieval.figures import ExtractedFigure
+
+            return [
+                ExtractedFigure(
+                    figure_index=1,
+                    page_number=2,
+                    image_bytes=b"fake-image-bytes",
+                    mime_type="image/png",
+                )
+            ]
+
+    class FakeVisionClient:
+        def describe_image(self, system, user, image_bytes, mime_type):
+            assert image_bytes == b"fake-image-bytes"
+            assert mime_type == "image/png"
+            return "Figure 1 shows a positive correlation."
+
+    paper = make_paper("paper7")
+    paper = paper.model_copy(
+        update={"pdf_url": "https://arxiv.org/pdf/2501.00007"}
+    )
+
+    report = index_papers(
+        [paper],
+        store,
+        pdf_extractor=FakePdfExtractor(),
+        figure_extractor=FakeFigureExtractor(),
+        vision_client=FakeVisionClient(),
+        extract_figures=True,
+        vision_enabled=True,
+        max_figures_per_pdf=10,
+    )
+
+    figure_chunks = [
+        chunk for chunk in store.chunks
+        if chunk.metadata.get("content_type") == "figure"
+    ]
+
+    assert len(figure_chunks) == 1
+    assert "positive correlation" in figure_chunks[0].text
+    assert figure_chunks[0].metadata["page_number"] == 2
+    assert report.figures_extracted == 1
+    assert report.figures_described == 1
+
+def test_index_papers_extracts_figures_when_full_text_exists():
+    store = FakeStore()
+
+    class FakePdfExtractor:
+        def extract_with_content(self, url):
+            return "Existing PDF text.", b"fake-pdf-bytes"
+
+    class FakeFigureExtractor:
+        def extract(self, pdf_bytes):
+            assert pdf_bytes == b"fake-pdf-bytes"
+
+            from src.retrieval.figures import ExtractedFigure
+
+            return [
+                ExtractedFigure(
+                    figure_index=1,
+                    page_number=2,
+                    image_bytes=b"fake-image-bytes",
+                    mime_type="image/png",
+                )
+            ]
+
+    class FakeVisionClient:
+        def describe_image(self, system, user, image_bytes, mime_type):
+            return "Figure shows a positive correlation."
+
+    paper = make_paper(
+        "paper8",
+        full_text="This paper already has extracted text.",
+    )
+    paper = paper.model_copy(
+        update={"pdf_url": "https://arxiv.org/pdf/2501.00008"}
+    )
+
+    report = index_papers(
+        [paper],
+        store,
+        pdf_extractor=FakePdfExtractor(),
+        figure_extractor=FakeFigureExtractor(),
+        vision_client=FakeVisionClient(),
+        extract_figures=True,
+        vision_enabled=True,
+    )
+
+    assert report.figures_extracted == 1
+    assert report.figures_described == 1
+    assert any(
+        chunk.metadata.get("content_type") == "figure"
+        for chunk in store.chunks
+    )

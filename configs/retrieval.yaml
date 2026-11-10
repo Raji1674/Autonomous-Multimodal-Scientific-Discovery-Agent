@@ -5,3 +5,6 @@ embedding_model: all-MiniLM-L6-v2
 chroma_path: data/chroma
 download_pdfs: true
 max_pdf_papers: 3
+extract_figures: false
+max_figures_per_pdf: 10
+vision_enabled: false
