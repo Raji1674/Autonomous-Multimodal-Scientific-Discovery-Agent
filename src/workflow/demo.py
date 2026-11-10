@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from src.agents.code_debugger import CodeDebugger
 from src.agents.csv_experiment_agent import CSVExperimentAgent
 from src.agents.statistical_critic import StatisticalCriticAgent
 from src.agents.code_executor import CodeExecutor
@@ -119,6 +120,7 @@ def main() -> None:
         reviewer=LiteratureReviewer(store, llm, top_k=2),
         hypothesis=HypothesisGenerator(llm),
         executor=CodeExecutor(),
+        debugger=CodeDebugger(llm),
         critic=StatisticalCriticAgent(),
         designer=ExperimentDesigner(llm),
         checkpoint_path=str(tmp / "ck.db"),

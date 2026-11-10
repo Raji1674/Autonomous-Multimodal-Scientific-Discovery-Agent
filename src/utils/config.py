@@ -14,6 +14,10 @@ class ModelConfig(BaseModel):
     model: str = "set-me"
     temperature: float = 0.2
 
+class VisionModelConfig(BaseModel):
+    provider: str = "groq"
+    model: str = "qwen/qwen3.8-27b"
+    temperature: float = 0.2
 
 class RetrievalConfig(BaseModel):
     top_k: int = 8
@@ -29,6 +33,7 @@ class AgentsConfig(BaseModel):
 
 class AppConfig(BaseModel):
     models: ModelConfig = ModelConfig()
+    vision: VisionModelConfig = VisionModelConfig()
     retrieval: RetrievalConfig = RetrievalConfig()
     agents: AgentsConfig = AgentsConfig()
 
@@ -45,10 +50,11 @@ def load_config(config_dir: str | Path = "configs", load_env: bool = True) -> Ap
         load_dotenv()
     d = Path(config_dir)
     return AppConfig(
-        models=ModelConfig(**_read(d / "models.yaml")),
-        retrieval=RetrievalConfig(**_read(d / "retrieval.yaml")),
-        agents=AgentsConfig(**_read(d / "agents.yaml")),
-    )
+    models=ModelConfig(**_read(d / "models.yaml")),
+    vision=VisionModelConfig(**_read(d / "vision.yaml")),
+    retrieval=RetrievalConfig(**_read(d / "retrieval.yaml")),
+    agents=AgentsConfig(**_read(d / "agents.yaml")),
+)
 
 
 def get_secret(name: str) -> str:

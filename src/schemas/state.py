@@ -18,6 +18,7 @@ class FailureState(str, Enum):
     CODE_GENERATION_FAILED = "CODE_GENERATION_FAILED"
     SANDBOX_REJECTED = "SANDBOX_REJECTED"
     EXECUTION_FAILED = "EXECUTION_FAILED"
+    RESULT_VALIDATION_FAILED = "RESULT_VALIDATION_FAILED"
     STATISTICAL_ANALYSIS_FAILED = "STATISTICAL_ANALYSIS_FAILED"
     SYNTHESIS_FAILED = "SYNTHESIS_FAILED"
     DATASET_DISCOVERY_FAILED = "DATASET_DISCOVERY_FAILED"
@@ -49,3 +50,16 @@ class ResearchState(TypedDict, total=False):
     task_override: str
     detected_task: str
     task_detection: dict
+    debug_attempts: int
+    execution_history: list[dict]
+    debug_reward_history: list[dict]
+    debug_feedback: str
+    debug_policy_strategy: str
+    debug_policy_stats: list[dict]
+    workflow_thread_id: str
+    final_report: str
+    human_paper_benchmark: dict
+    revision_count: int
+    revision_history: list[dict]
+    latex_abstract: str
+    latex_abstract_path: str

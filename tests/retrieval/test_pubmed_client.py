@@ -156,3 +156,181 @@ def test_pubmed_search_failure():
 
     with pytest.raises(LiteratureSearchError):
         client.search("heart disease")
+
+
+
+from xml.etree import ElementTree as ET
+
+from src.retrieval.pubmed_client import (
+    _parse_date,
+    parse_pubmed_xml,
+    PubMedClient,
+)
+from src.retrieval.metadata import LiteratureSearchError
+
+
+def test_parse_journal_publication_date():
+    article = ET.fromstring("""
+    <Article>
+        <Journal>
+            <JournalIssue>
+                <PubDate>
+                    <Year>2023</Year>
+                    <Month>Mar</Month>
+                </PubDate>
+            </JournalIssue>
+        </Journal>
+    </Article>
+    """)
+
+    assert _parse_date(article) == "2023-03"
+
+
+def test_parse_year_and_numeric_month():
+    article = ET.fromstring("""
+    <Article>
+        <ArticleDate>
+            <Year>2024</Year>
+            <Month>2</Month>
+        </ArticleDate>
+    </Article>
+    """)
+
+    assert _parse_date(article) == "2024-02"
+
+
+def test_parse_medline_date():
+    article = ET.fromstring("""
+    <Article>
+        <ArticleDate>
+            <MedlineDate>2020 Jan-Feb</MedlineDate>
+        </ArticleDate>
+    </Article>
+    """)
+
+    assert _parse_date(article) == "2020"
+
+
+def test_parse_missing_date():
+    article = ET.fromstring("<Article><Title>Research</Title></Article>")
+
+    assert _parse_date(article) == ""
+
+
+def test_skip_article_without_pmid():
+    xml = """
+    <PubmedArticleSet>
+        <PubmedArticle>
+            <MedlineCitation>
+                <Article>
+                    <ArticleTitle>Missing ID</ArticleTitle>
+                </Article>
+            </MedlineCitation>
+        </PubmedArticle>
+    </PubmedArticleSet>
+    """
+
+    assert parse_pubmed_xml(xml) == []
+
+
+def test_parse_collective_author():
+    xml = """
+    <PubmedArticleSet>
+        <PubmedArticle>
+            <MedlineCitation>
+                <PMID>12345</PMID>
+                <Article>
+                    <ArticleTitle>Research</ArticleTitle>
+                    <AuthorList>
+                        <Author>
+                            <CollectiveName>Research Group</CollectiveName>
+                        </Author>
+                    </AuthorList>
+                </Article>
+            </MedlineCitation>
+        </PubmedArticle>
+    </PubmedArticleSet>
+    """
+
+    papers = parse_pubmed_xml(xml)
+
+    assert papers[0].authors == ["Research Group"]
+
+
+def test_parse_doi():
+    xml = """
+    <PubmedArticleSet>
+        <PubmedArticle>
+            <MedlineCitation>
+                <PMID>12345</PMID>
+                <Article>
+                    <ArticleTitle>Research</ArticleTitle>
+                </Article>
+            </MedlineCitation>
+            <PubmedData>
+                <ArticleIdList>
+                    <ArticleId IdType="doi">10.1234/example</ArticleId>
+                </ArticleIdList>
+            </PubmedData>
+        </PubmedArticle>
+    </PubmedArticleSet>
+    """
+
+    papers = parse_pubmed_xml(xml)
+
+    assert papers[0].doi == "10.1234/example"
+
+
+def test_pubmed_search_empty_ids():
+    calls = []
+
+    def fake_fetch(endpoint, **kwargs):
+        calls.append(endpoint)
+        return b"<eSearchResult><IdList></IdList></eSearchResult>"
+
+    client = PubMedClient(fetcher=fake_fetch, sleep=lambda _: None)
+
+    assert client.search("unknown topic") == []
+    assert calls == ["esearch"]
+
+
+def test_pubmed_search_multiple_batches():
+    calls = []
+    sleep_calls = []
+
+    def fake_fetch(endpoint, **kwargs):
+        calls.append((endpoint, kwargs))
+
+        if endpoint == "esearch":
+            return b"""
+            <eSearchResult>
+                <IdList>
+                    <Id>1</Id><Id>2</Id><Id>3</Id>
+                </IdList>
+            </eSearchResult>
+            """
+
+        return b"<PubmedArticleSet></PubmedArticleSet>"
+
+    client = PubMedClient(
+        fetcher=fake_fetch,
+        sleep=lambda delay: sleep_calls.append(delay),
+    )
+
+    result = client.search("research", max_results=3, batch=2)
+
+    assert result == []
+    assert len(calls) == 3
+    assert len(sleep_calls) == 2
+
+
+def test_pubmed_search_invalid_batch():
+    client = PubMedClient(
+        fetcher=lambda *args, **kwargs: (
+            b"<eSearchResult><IdList><Id>1</Id></IdList></eSearchResult>"
+        ),
+        sleep=lambda _: None,
+    )
+
+    with pytest.raises(LiteratureSearchError):
+        client.search("research", batch=0)

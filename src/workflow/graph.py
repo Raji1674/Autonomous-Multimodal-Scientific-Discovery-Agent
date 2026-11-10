@@ -1,17 +1,20 @@
 
-"""LangGraph workflow with optional dataset discovery and CSV experiments."""
+"""LangGraph workflow with dataset discovery, CSV experiments and self-debug."""
 from __future__ import annotations
 
 import sqlite3
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
-from src.schemas.state import ResearchState
+from src.schemas.state import FailureState, ResearchState
 
 Node = Callable[[ResearchState], dict]
+
+MAX_EXECUTION_ATTEMPTS = 3
 
 
 def _route(next_node: str) -> Callable[[ResearchState], str]:
@@ -32,14 +35,20 @@ def build_graph(
     designer: Node | None = None,
     dataset_discovery: Node | None = None,
     csv_experiment: Node | None = None,
+    debugger: Node | None = None,
+    synthesis: Node | None = None,
 ):
-    """Build the research workflow with optional CSV experiment support."""
+    """Build the research workflow with optional dataset and debug support."""
+
     graph = StateGraph(ResearchState)
 
     graph.add_node("reviewer", reviewer)
     graph.add_node("hypothesis", hypothesis)
     graph.add_node("executor", executor)
     graph.add_node("critic", critic)
+
+    if synthesis is not None:
+        graph.add_node("synthesis", synthesis)
 
     if designer is not None:
         graph.add_node("designer", designer)
@@ -50,6 +59,9 @@ def build_graph(
     if csv_experiment is not None:
         graph.add_node("csv_experiment", csv_experiment)
 
+    if debugger is not None:
+        graph.add_node("debugger", debugger)
+
     graph.add_edge(START, "reviewer")
 
     graph.add_conditional_edges(
@@ -58,6 +70,7 @@ def build_graph(
         {"hypothesis": "hypothesis", "end": END},
     )
 
+    # Dataset discovery and CSV experiment path.
     if dataset_discovery is not None:
         graph.add_conditional_edges(
             "hypothesis",
@@ -66,14 +79,26 @@ def build_graph(
         )
 
         if csv_experiment is not None:
+
             graph.add_conditional_edges(
                 "dataset_discovery",
                 _route("csv_experiment"),
                 {"csv_experiment": "csv_experiment", "end": END},
             )
 
-            # CSVExperimentAgent performs its own statistical evaluation.
-            graph.add_edge("csv_experiment", END)
+            def route_after_csv(state: ResearchState) -> str:
+                if state.get("failure_state"):
+                    return "end"
+                return "synthesis" if synthesis is not None else "end"
+
+            graph.add_conditional_edges(
+                "csv_experiment",
+                route_after_csv,
+                {
+                    "synthesis": "synthesis" if synthesis is not None else END,
+                    "end": END,
+                },
+            )
 
         else:
             next_node = "designer" if designer is not None else "executor"
@@ -93,6 +118,7 @@ def build_graph(
             {next_node: next_node, "end": END},
         )
 
+    # Experiment designer.
     if designer is not None:
         graph.add_conditional_edges(
             "designer",
@@ -100,17 +126,70 @@ def build_graph(
             {"executor": "executor", "end": END},
         )
 
-    graph.add_conditional_edges(
-        "executor",
-        _route("critic"),
-        {"critic": "critic", "end": END},
-    )
+    # Executor and bounded self-debug retry.
+    def route_after_executor(state: ResearchState) -> str:
+        failure = state.get("failure_state")
 
-    graph.add_edge("critic", END)
+        if not failure:
+            return "critic"
+
+        if (
+            failure == FailureState.EXECUTION_FAILED.value
+            and debugger is not None
+            and state.get("debug_attempts", 0) < MAX_EXECUTION_ATTEMPTS
+        ):
+            return "debugger"
+
+        return "end"
+
+    executor_routes = {
+    "critic": "critic",
+    "end": END,
+}
+
+    if debugger is not None:
+        executor_routes["debugger"] = "debugger"
+
+    graph.add_conditional_edges(
+    "executor",
+    route_after_executor,
+    executor_routes,
+)
+
+    # Debugger retry path.
+    if debugger is not None:
+        graph.add_conditional_edges(
+            "debugger",
+            lambda state: (
+                "executor" if not state.get("failure_state") else "end"
+            ),
+            {"executor": "executor", "end": END},
+        )
+
+    # Statistical critic -> synthesis.
+    if synthesis is not None:
+        graph.add_conditional_edges(
+        "critic",
+            lambda state: (
+            "synthesis" if not state.get("failure_state") else "end"
+        ),
+        {
+            "synthesis": "synthesis",
+            "end": END,
+        },
+    )
+        graph.add_edge("synthesis", END)
+    else:
+        graph.add_edge("critic", END)
 
     saver = None
 
     if checkpoint_path:
+        Path(checkpoint_path).parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         connection = sqlite3.connect(
             checkpoint_path,
             check_same_thread=False,
@@ -122,10 +201,14 @@ def build_graph(
         interrupt_after=interrupt_after,
     )
 
+def new_config(thread_id: str | None = None):
+    """Create a new or reusable workflow thread configuration."""
+    if thread_id is not None:
+        if not isinstance(thread_id, str) or not thread_id.strip():
+            raise ValueError("thread_id must be a non-empty string")
 
-def new_config():
     return {
         "configurable": {
-            "thread_id": f"run-{uuid.uuid4().hex[:8]}"
+            "thread_id": thread_id or f"run-{uuid.uuid4().hex[:8]}"
         }
     }

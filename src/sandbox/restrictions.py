@@ -7,7 +7,7 @@ CPU_LIMIT = 0.5
 PIDS_LIMIT = 64
 
 # Execution timeout in seconds
-EXECUTION_TIMEOUT = 90
+EXECUTION_TIMEOUT = 180
 
 # Docker security settings
 NETWORK_MODE = "none"

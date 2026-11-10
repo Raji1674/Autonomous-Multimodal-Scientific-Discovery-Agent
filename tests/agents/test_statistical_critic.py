@@ -23,10 +23,11 @@ def test_clear_improvement_is_accepted():
     assert ev["verdict"] == "accept" and ev["analysis"]["p_adjusted"] < 0.05
 
 
-def test_zero_mean_difference_is_rejected():
-    diffs = np.tile([0.003, -0.003], 10)  # mean exactly 0
+def test_zero_mean_difference_is_inconclusive():
+    diffs = np.tile([0.003, -0.003], 10)
     ev = StatisticalCritic().evaluate(PLAN, synthetic(diffs))
-    assert ev["verdict"] == "reject" and ev["analysis"]["p"] == pytest.approx(1.0)
+    assert ev["verdict"] == "inconclusive"
+    assert ev["analysis"]["p"] == pytest.approx(1.0)
 
 
 def test_significant_but_opposite_direction_is_rejected():
@@ -46,7 +47,7 @@ def test_bonferroni_can_flip_a_borderline_result():
     single = StatisticalCritic(min_abs_diff=0.001, min_effect=0.1).evaluate(PLAN, synthetic(diffs), n_tests=1)
     many = StatisticalCritic(min_abs_diff=0.001, min_effect=0.1).evaluate(PLAN, synthetic(diffs), n_tests=50)
     assert many["analysis"]["p_adjusted"] >= single["analysis"]["p_adjusted"]
-    assert many["verdict"] == "reject"
+    assert many["verdict"] == "inconclusive"
 
 
 @pytest.mark.parametrize("label", ["not_executed", "simulated"])

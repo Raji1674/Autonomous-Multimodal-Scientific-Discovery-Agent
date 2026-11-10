@@ -141,3 +141,78 @@ def test_experiment_plan_execution(monkeypatch):
     assert result["experiment_results"]["result_label"] == "executed"
     assert result["experiment_results"]["baseline"] == [0.82, 0.84, 0.81]
     assert result["experiment_results"]["treatment"] == [0.86, 0.87, 0.85]
+
+
+def test_invalid_experiment_plan():
+    result = CodeExecutor().run({
+        "experiment_plan": {
+            "research_question": "Test question",
+            "hypothesis": "Test hypothesis",
+            "null_hypothesis": "No effect",
+            "dataset": "invalid_dataset",
+            "model": "logreg",
+            "independent_variable": "C",
+            "baseline_value": 0.1,
+            "treatment_value": 1.0,
+        }
+    })
+
+    assert result["failure_state"] == FailureState.CODE_GENERATION_FAILED.value
+
+
+def test_invalid_result_output(monkeypatch):
+    monkeypatch.setattr(
+        "src.agents.code_executor.execute_python",
+        lambda code: {
+            "result_label": "executed",
+            "exit_code": 0,
+            "output": "not valid JSON",
+            "output_truncated": False,
+        },
+    )
+
+    result = CodeExecutor().run({
+        "generated_code": {"code": "print('test')"}
+    })
+
+    assert result["failure_state"] == FailureState.RESULT_VALIDATION_FAILED.value
+
+
+def test_unequal_paired_results(monkeypatch):
+    monkeypatch.setattr(
+        "src.agents.code_executor.execute_python",
+        lambda code: {
+            "result_label": "executed",
+            "exit_code": 0,
+            "output": (
+                '{"result_label":"executed",'
+                '"baseline":[0.8,0.82],'
+                '"treatment":[0.85]}'
+            ),
+            "output_truncated": False,
+        },
+    )
+
+    result = CodeExecutor().run({
+        "generated_code": {"code": "print('test')"}
+    })
+
+    assert result["failure_state"] == FailureState.RESULT_VALIDATION_FAILED.value
+
+
+def test_non_success_result_label(monkeypatch):
+    monkeypatch.setattr(
+        "src.agents.code_executor.execute_python",
+        lambda code: {
+            "result_label": "execution_failed",
+            "exit_code": 1,
+            "output": "Runtime error",
+            "output_truncated": False,
+        },
+    )
+
+    result = CodeExecutor().run({
+        "generated_code": {"code": "print('test')"}
+    })
+
+    assert result["failure_state"] == FailureState.EXECUTION_FAILED.value

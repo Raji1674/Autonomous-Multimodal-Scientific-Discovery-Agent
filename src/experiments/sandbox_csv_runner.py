@@ -61,6 +61,7 @@ def run_sandbox_csv_experiment(
     test_size: float = 0.2,
     expected_direction: str = "higher",
     n_tests: int = 1,
+    script_override: str | None = None,
 ) -> dict:
     """Execute paired CSV experiments in Docker and evaluate their results."""
 
@@ -235,6 +236,10 @@ result = {
 
 print(json.dumps(result, allow_nan=False))
 '''.replace("CONFIG_JSON", repr(config_json))
+    if script_override is not None:
+        if not isinstance(script_override, str) or not script_override.strip():
+         raise ValueError("script_override must be non-empty Python code")
+    script = script_override
 
     # Execute experiment inside Docker.
     try:
@@ -244,10 +249,15 @@ print(json.dumps(result, allow_nan=False))
         )
     except SandboxExecutionError as exc:
         return {
-            "success": False,
-            "stage": "sandbox",
-            "issues": [str(exc)],
-        }
+        "success": False,
+        "stage": "sandbox",
+        "issues": [str(exc)],
+        "debug_feedback": str(exc),
+        "generated_code": {
+            "code": script,
+            "experiment_name": "csv_random_forest_experiment",
+        },
+    }
 
     if docker_result.get("output_truncated"):
         return {
