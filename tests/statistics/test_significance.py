@@ -80,6 +80,7 @@ def test_normality_not_testable_for_constant_values():
     assert check_normality([1.0, 1.0, 1.0])["normal"] is None
 
 
+
 def test_corrected_resampled_ttest_constant_nonzero_differences():
     result = corrected_resampled_ttest(
         [0.1, 0.1, 0.1, 0.1, 0.1],
@@ -88,5 +89,6 @@ def test_corrected_resampled_ttest_constant_nonzero_differences():
     )
 
     assert result["se"] == 0.0
-    assert result["ci"] == (0.1, 0.1)
-    assert result["p"] is None  # not 0.0, because the t-test is undefined for constant values
+    assert result["ci"] is None
+    assert result["p"] is None
+    assert result["t"] is None

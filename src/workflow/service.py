@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import uuid
 from pathlib import Path
 
-from src.experiments.dataset_validator import validate_csv_dataset
 from src.agents.code_debugger import CodeDebugger
 from src.agents.code_executor import CodeExecutor
 from src.agents.csv_experiment_agent import CSVExperimentAgent
@@ -16,6 +16,8 @@ from src.agents.hypothesis_generator import HypothesisGenerator
 from src.agents.literature_reviewer import LiteratureReviewer
 from src.agents.statistical_critic import StatisticalCriticAgent
 from src.agents.synthesis import SynthesisAgent
+from src.experiments.dataset_validator import validate_csv_dataset
+from src.experiments.research_memory import ResearchMemory
 from src.ingestion.pipeline import run_ingestion
 from src.llm.providers import make_client
 from src.schemas.state import ResearchState
@@ -24,6 +26,9 @@ from src.vectorstore.chroma_store import ChromaStore
 from src.vectorstore.embeddings import SentenceTransformerEmbedder
 from src.workflow.dataset_discovery import dataset_discovery_node
 from src.workflow.graph import build_graph, new_config
+
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchService:
@@ -36,6 +41,7 @@ class ResearchService:
         llm=None,
         store=None,
         enable_ingestion: bool = True,
+        memory=None,
     ):
         self.config = load_config(config_dir)
 
@@ -57,6 +63,15 @@ class ResearchService:
         self.enable_ingestion = enable_ingestion
         self.checkpoint_path = checkpoint_path
 
+        # Persistent research memory is separate from workflow checkpoints.
+        self.memory = (
+            memory
+            if memory is not None
+            else ResearchMemory(
+                "data/memory/research_memory.sqlite"
+            )
+        )
+
         self.reviewer = LiteratureReviewer(
             self.store,
             self.llm,
@@ -74,8 +89,10 @@ class ResearchService:
         self.critic = StatisticalCriticAgent(llm=self.llm)
 
         self.csv_experiment = CSVExperimentAgent(
-    debugger=self.debugger,
-    reward_policy=self.executor.policy,)
+            debugger=self.debugger,
+            reward_policy=self.debugger.policy,
+        )
+
         self.synthesis = SynthesisAgent(self.llm)
 
     def _discover_or_use_dataset(self, state: ResearchState) -> dict:
@@ -182,6 +199,8 @@ class ResearchService:
         ):
             raise ValueError("research_question cannot be empty")
 
+        research_question = research_question.strip()
+
         should_ingest = (
             self.enable_ingestion if ingest is None else ingest
         )
@@ -190,15 +209,26 @@ class ResearchService:
 
         if should_ingest:
             ingestion_report = run_ingestion(
-                research_question.strip(),
+                research_question,
                 self.store,
                 max_per_source=50,
             )
 
+        app = self._build_app(experiment_mode)
+        config = new_config(thread_id)
+        active_thread_id = config["configurable"]["thread_id"]
+
         initial_state: ResearchState = {
-            "research_question": research_question.strip(),
+            "research_question": research_question,
             "failure_state": None,
             "error": None,
+            "memory_context": [],
+            "memory_retrieval": {
+                "records_found": 0,
+                "retrieval_method": "keyword_overlap",
+            },
+            "memory_saved": False,
+            "memory_record_id": "",
         }
 
         if dataset_path is not None:
@@ -210,21 +240,75 @@ class ResearchService:
         if task_override is not None:
             initial_state["task_override"] = task_override
 
-        app = self._build_app(experiment_mode)
-        config = new_config(thread_id)
+        # Retrieve relevant previous research for a new workflow.
+        # A resumed workflow must continue with its checkpointed state.
+        if not resume:
+            try:
+                previous_research = self.memory.retrieve(
+                    research_question,
+                    limit=3,
+                    exclude_thread_id=active_thread_id,
+                )
 
+                initial_state["memory_context"] = previous_research
+               
+                initial_state["memory_retrieval"] = {
+                    "records_found": len(previous_research),
+                    "retrieval_method": "keyword_overlap",
+                }
+
+                logger.info(
+                    "Retrieved %d previous research records",
+                    len(previous_research),
+                )
+
+            except Exception:
+                logger.exception(
+                    "Long-term research memory retrieval failed"
+                )
+
+        # Execute or resume the workflow.
         if resume:
             snapshot = app.get_state(config)
+
             if not snapshot or not snapshot.values:
                 raise ValueError(
                     f"No saved workflow state found for thread: {thread_id}"
                 )
+
             final_state = app.invoke(None, config=config)
+
         else:
-            final_state = app.invoke(initial_state, config=config)
+            final_state = app.invoke(
+                initial_state,
+                config=config,
+            )
+
+        final_state = dict(final_state)
+
+        # Save successful research to persistent memory.
+        try:
+            memory_record_id = self.memory.save(
+                final_state,
+                thread_id=active_thread_id,
+            )
+
+            if memory_record_id:
+                final_state["memory_saved"] = True
+                final_state["memory_record_id"] = memory_record_id
+
+                logger.info(
+                    "Research saved to long-term memory: %s",
+                    memory_record_id,
+                )
+
+        except Exception:
+            logger.exception(
+                "Could not save completed research to long-term memory"
+            )
 
         return {
-            "run_id": config["configurable"]["thread_id"],
+            "run_id": active_thread_id,
             "experiment_mode": experiment_mode,
             "ingestion_report": (
                 {
@@ -237,5 +321,5 @@ class ResearchService:
                 else None
             ),
             "state": final_state,
-            "workflow_thread_id": config["configurable"]["thread_id"],
+            "workflow_thread_id": active_thread_id,
         }

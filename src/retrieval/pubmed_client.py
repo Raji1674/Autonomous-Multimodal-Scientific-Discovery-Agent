@@ -63,8 +63,6 @@ def parse_pubmed_xml(xml_bytes: bytes | str) -> list[Paper]:
         types = [_text(t) for t in article.findall("PublicationTypeList/PublicationType")]
         if "Preprint" in types:
             status = "preprint"
-        elif "Journal Article" in types:
-            status = "peer_reviewed"  # convention: indexed journal article; not independently verified
         else:
             status = "unknown"
         papers.append(Paper(

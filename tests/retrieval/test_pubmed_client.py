@@ -62,7 +62,7 @@ def test_parse_pubmed_xml():
     assert papers[0].authors == ["John Smith"]
     assert papers[0].doi == "10.1000/example"
     assert papers[0].date == "2025-01-05"
-    assert papers[0].publication_status == "peer_reviewed"
+    assert papers[0].publication_status == "unknown"
 
 
 def test_parse_pubmed_preprint_status():
@@ -334,3 +334,14 @@ def test_pubmed_search_invalid_batch():
 
     with pytest.raises(LiteratureSearchError):
         client.search("research", batch=0)
+
+def test_parse_pubmed_other_publication_type_status():
+    xml = XML.replace(
+        b"Journal Article",
+        b"Review",
+    )
+
+    papers = parse_pubmed_xml(xml)
+
+    assert len(papers) == 1
+    assert papers[0].publication_status == "unknown"

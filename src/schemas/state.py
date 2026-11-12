@@ -63,3 +63,8 @@ class ResearchState(TypedDict, total=False):
     revision_history: list[dict]
     latex_abstract: str
     latex_abstract_path: str
+        # Long-term research memory
+    memory_context: list[dict]
+    memory_retrieval: dict
+    memory_saved: bool
+    memory_record_id: str

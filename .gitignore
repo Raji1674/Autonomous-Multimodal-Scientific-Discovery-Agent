@@ -31,3 +31,8 @@ htmlcov/
 # IDE files
 .vscode/
 .idea/
+# Generated runtime data
+data/checkpoints/
+data/extracted_images/
+data/memory/
+*.zip

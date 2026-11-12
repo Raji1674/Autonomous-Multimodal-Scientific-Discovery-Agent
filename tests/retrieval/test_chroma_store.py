@@ -156,3 +156,35 @@ def test_persistent_storage(tmp_path):
     second_store = ChromaStore(path, embedder)
 
     assert second_store.count() == 1
+
+
+def test_pdf_citation_metadata_survives_storage_and_retrieval(store):
+    pdf_chunk = make_chunk(
+        chunk_id="pdf:sample#page3#0",
+        paper_id="pdf:sample",
+        text="Verified research evidence from the uploaded PDF.",
+        metadata={
+            "title": "Sample Research PDF",
+            "source": "uploaded_pdf",
+            "page_number": 3,
+            "citation_key": "pdf:sample",
+            "publication_status": "peer_reviewed",
+        },
+    )
+
+    store.upsert([pdf_chunk])
+
+    results = store.query(
+        "verified research evidence",
+        k=1,
+    )
+
+    assert len(results) == 1
+
+    metadata = results[0].chunk.metadata
+
+    assert results[0].chunk.paper_id == "pdf:sample"
+    assert metadata["page_number"] == 3
+    assert metadata["citation_key"] == "pdf:sample"
+    assert metadata["source"] == "uploaded_pdf"
+    assert metadata["publication_status"] == "peer_reviewed"

@@ -21,16 +21,31 @@ class CSVExperimentAgent(BaseAgent):
 
     def __init__(self, debugger=None, reward_policy=None):
         super().__init__()
-
         self.debugger = debugger
-
-        # Reuse the debugger's policy so selected strategies
-        # receive rewards in the same policy instance.
         self.reward_policy = (
             reward_policy
             if reward_policy is not None
             else getattr(debugger, "policy", None)
         )
+
+    @staticmethod
+    def _failure(
+        message: str,
+        task: str | None = None,
+        experiment_results: dict | None = None,
+    ) -> dict:
+        update = {
+            "failure_state": FailureState.EXECUTION_FAILED.value,
+            "error": message,
+        }
+
+        if task:
+            update["detected_task"] = task
+
+        if experiment_results is not None:
+            update["experiment_results"] = experiment_results
+
+        return update
 
     def run(self, state: ResearchState) -> dict:
         """Detect the task, execute the experiment and return results."""
@@ -48,17 +63,41 @@ class CSVExperimentAgent(BaseAgent):
                 "Selected hypothesis must be a dictionary."
             )
 
-        detection = detect_task(
-            file_path=dataset_path,
-            target_column=target_column,
-            task_override=task_override,
-        )
+        try:
+            detection = detect_task(
+                file_path=dataset_path,
+                target_column=target_column,
+                task_override=task_override,
+                research_question=state.get("research_question"),
+            )
+        except Exception as exc:
+            detection = {
+                "success": False,
+                "error": str(exc),
+            }
 
         if not isinstance(detection, dict):
-            return self._failure(
-                "Task detector returned an invalid result: "
-                f"{type(detection).__name__}"
-            )
+            detection = {
+                "success": False,
+                "error": "Task detector returned an invalid result.",
+            }
+
+        # An explicit, supported task override takes precedence when
+        # automatic detection cannot classify a small or unusual dataset.
+        if (
+            not detection.get("success")
+            and task_override in {
+                "classification",
+                "regression",
+                "clustering",
+            }
+        ):
+            detection = {
+                "success": True,
+                "task": task_override,
+                "target_column": target_column,
+                "reason": "Explicit task override",
+            }
 
         if not detection.get("success"):
             return self._failure(
@@ -66,6 +105,7 @@ class CSVExperimentAgent(BaseAgent):
             )
 
         task = detection.get("task")
+        target_column = detection.get("target_column", target_column)
 
         if task not in {"classification", "regression", "clustering"}:
             return self._failure(
@@ -84,13 +124,11 @@ class CSVExperimentAgent(BaseAgent):
                     target_column,
                     state,
                 )
-
             elif task == "regression":
                 result = train_regression_models(
                     file_path=dataset_path,
                     target_column=target_column,
                 )
-
             else:
                 result = train_clustering_models(
                     file_path=dataset_path
@@ -105,26 +143,29 @@ class CSVExperimentAgent(BaseAgent):
 
         if not isinstance(result, dict):
             return self._failure(
-                f"{task.title()} experiment returned an invalid result: "
-                f"{type(result).__name__}",
+                f"{task.title()} experiment returned an invalid result.",
                 task=task,
             )
 
+        debug_keys = (
+            "debug_attempts",
+            "debug_reward_history",
+            "debug_policy_stats",
+            "execution_history",
+        )
+
         debug_fields = {
             key: result[key]
-            for key in (
-                "debug_attempts",
-                "debug_reward_history",
-                "debug_policy_stats",
-                "execution_history",
-            )
+            for key in debug_keys
             if key in result
         }
+
         clean_result = {
-                key: value
-                for key, value in result.items()
-                if key not in debug_fields
-}
+            key: value
+            for key, value in result.items()
+            if key not in debug_keys
+        }
+
         if not result.get("success"):
             update = self._failure(
                 f"{task.title()} experiment failed: "
@@ -148,26 +189,6 @@ class CSVExperimentAgent(BaseAgent):
             "verdict": "completed",
             **debug_fields,
         }
-
-    @staticmethod
-    def _failure(
-        message: str,
-        task: str | None = None,
-        experiment_results: dict | None = None,
-    ) -> dict:
-
-        update = {
-            "failure_state": FailureState.EXECUTION_FAILED.value,
-            "error": message,
-        }
-
-        if task:
-            update["detected_task"] = task
-
-        if experiment_results is not None:
-            update["experiment_results"] = experiment_results
-
-        return update
 
     def _record_strategy_reward(
         self,
@@ -193,13 +214,101 @@ class CSVExperimentAgent(BaseAgent):
 
         return reward_history
 
+    @staticmethod
+    def _get_model_configuration(state: dict):
+        """Choose algorithms and parameters from the research wording."""
+
+        hypothesis = state.get("selected_hypothesis") or {}
+
+        if isinstance(hypothesis, dict):
+            hypothesis_text = " ".join(
+                str(hypothesis.get(key, ""))
+                for key in (
+                    "hypothesis",
+                    "statement",
+                    "experiment",
+                    "success_metric",
+                    "falsification_condition",
+                )
+            )
+        else:
+            hypothesis_text = str(hypothesis)
+
+        comparison_text = (
+            hypothesis_text + " " +
+            str(state.get("research_question", ""))
+        ).lower()
+
+        # Logistic Regression regularization experiment.
+        if any(term in comparison_text for term in (
+            "logistic regression",
+            "logisticregression",
+            "logreg",
+        )):
+            return (
+                "logistic_regression",
+                "logistic_regression",
+                {"C": 1.0, "max_iter": 2000},
+                {"C": 0.1, "max_iter": 2000},
+            )
+
+        # Direct comparison between Random Forest and XGBoost.
+        has_rf = (
+            "random forest" in comparison_text
+            or "randomforest" in comparison_text
+        )
+        has_xgb = (
+            "xgboost" in comparison_text
+            or "xgb" in comparison_text
+        )
+
+        if has_rf and has_xgb:
+            return (
+                "random_forest",
+                "xgboost",
+                {"n_estimators": 100},
+                {"n_estimators": 200},
+            )
+
+        if has_xgb:
+            return (
+                "xgboost",
+                "xgboost",
+                {"n_estimators": 100},
+                {"n_estimators": 200},
+            )
+
+        if has_rf:
+            return (
+                "random_forest",
+                "random_forest",
+                {"n_estimators": 100},
+                {"n_estimators": 200},
+            )
+
+        # Preserve the project's default classification experiment
+        # when no algorithm is specified.
+        return (
+            "random_forest",
+            "random_forest",
+            {"n_estimators": 100},
+            {"n_estimators": 200},
+        )
+
     def _run_classification(
         self,
         dataset_path: str,
         target_column: str,
         state: ResearchState,
     ) -> dict:
-        """Run paired Random Forest experiments with automatic repair."""
+        """Run paired model experiments with automatic repair."""
+
+        (
+            baseline_algorithm,
+            treatment_algorithm,
+            baseline_params,
+            treatment_params,
+        ) = self._get_model_configuration(state)
 
         script_override = None
         pending_strategy = None
@@ -207,14 +316,15 @@ class CSVExperimentAgent(BaseAgent):
         reward_history = list(
             state.get("debug_reward_history") or []
         )
-
         execution_history = list(
             state.get("execution_history") or []
         )
 
         last_result = None
+        attempts_made = 0
 
         for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            attempts_made = attempt
 
             result = run_sandbox_csv_experiment(
                 file_path=dataset_path,
@@ -224,13 +334,27 @@ class CSVExperimentAgent(BaseAgent):
                 expected_direction="higher",
                 n_tests=1,
                 script_override=script_override,
+                baseline_algorithm=baseline_algorithm,
+                treatment_algorithm=treatment_algorithm,
+                baseline_params=baseline_params,
+                treatment_params=treatment_params,
             )
 
             last_result = result
 
-            # Successful execution and statistical evaluation.
-            if result.get("success"):
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "stage": "result_validation",
+                    "issues": [
+                        "Sandbox runner returned an invalid result."
+                    ],
+                    "debug_attempts": attempt,
+                    "debug_reward_history": reward_history,
+                    "execution_history": execution_history,
+                }
 
+            if result.get("success"):
                 self._record_strategy_reward(
                     pending_strategy,
                     1.0,
@@ -256,9 +380,7 @@ class CSVExperimentAgent(BaseAgent):
                     "execution_history": execution_history,
                 }
 
-            # Only Docker execution failures are repairable.
-            # Validation, parsing and critic failures must not
-            # be silently repaired or bypassed.
+            # Only sandbox failures can be repaired by the debugger.
             if result.get("stage") != "sandbox":
                 return {
                     **result,
@@ -272,9 +394,9 @@ class CSVExperimentAgent(BaseAgent):
                     "execution_history": execution_history,
                 }
 
+            issues = result.get("issues") or ["Unknown sandbox error"]
             error_message = str(
-                result.get("debug_feedback")
-                or result.get("issues", ["Unknown sandbox error"])[0]
+                result.get("debug_feedback") or issues[0]
             )
 
             execution_history.append({
@@ -283,8 +405,6 @@ class CSVExperimentAgent(BaseAgent):
                 "error": error_message,
             })
 
-            # The previous debugging strategy receives a negative
-            # reward if its repaired script also failed.
             self._record_strategy_reward(
                 pending_strategy,
                 -1.0,
@@ -292,14 +412,9 @@ class CSVExperimentAgent(BaseAgent):
                 "execution_failure",
                 reward_history,
             )
-
             pending_strategy = None
 
-            # No more retries.
-            if attempt >= self.MAX_ATTEMPTS:
-                break
-
-            if self.debugger is None:
+            if attempt >= self.MAX_ATTEMPTS or self.debugger is None:
                 break
 
             generated_code = result.get("generated_code")
@@ -307,7 +422,6 @@ class CSVExperimentAgent(BaseAgent):
             if not isinstance(generated_code, dict):
                 break
 
-            # Send the failed script and sandbox error to the debugger.
             debug_state = {
                 **state,
                 "generated_code": generated_code,
@@ -315,7 +429,13 @@ class CSVExperimentAgent(BaseAgent):
                 "error": error_message,
             }
 
-            repair = self.debugger(debug_state)
+            try:
+                repair = self.debugger(debug_state)
+            except Exception as exc:
+                error_message = (
+                    f"Debugger raised {type(exc).__name__}: {exc}"
+                )
+                break
 
             if not isinstance(repair, dict):
                 break
@@ -341,37 +461,26 @@ class CSVExperimentAgent(BaseAgent):
                 repair.get("generated_code") or {}
             ).get("code")
 
-            strategy = repair.get("debug_policy_strategy")
-
             if (
                 not isinstance(repaired_code, str)
                 or not repaired_code.strip()
-                or not strategy
             ):
-                return {
-                    "success": False,
-                    "stage": "debugger",
-                    "issues": [
-                        "Debugger did not return valid repaired code "
-                        "and a debugging strategy."
-                    ],
-                    "debug_attempts": attempt,
-                    "debug_reward_history": reward_history,
-                    "execution_history": execution_history,
-                }
+                break
 
             script_override = repaired_code
-            pending_strategy = strategy
+            pending_strategy = repair.get("debug_policy_strategy")
+
+        final_issues = (
+            last_result.get("issues", [])
+            if isinstance(last_result, dict)
+            else ["Maximum execution attempts reached."]
+        )
 
         return {
             "success": False,
             "stage": "sandbox",
-            "issues": (
-                last_result.get("issues", [])
-                if isinstance(last_result, dict)
-                else ["Maximum execution attempts reached."]
-            ),
-            "debug_attempts": self.MAX_ATTEMPTS,
+            "issues": final_issues,
+            "debug_attempts": attempts_made,
             "debug_reward_history": reward_history,
             "debug_policy_stats": (
                 self.reward_policy.get_stats()

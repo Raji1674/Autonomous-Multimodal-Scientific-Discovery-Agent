@@ -19,7 +19,10 @@ def is_constant(x) -> bool:
 
 
 def _f(x) -> float | None:
-    """JSON-safe float: NaN/inf become None."""
+    """JSON-safe float: NaN/inf/None become None."""
+    if x is None:
+        return None
+
     x = float(x)
     return x if math.isfinite(x) else None
 
@@ -79,29 +82,65 @@ def bootstrap_ci(diffs, n_boot: int = 10000, alpha: float = 0.05, seed: int = 0)
     return float(lo), float(hi)
 
 
-def corrected_resampled_ttest(diffs, n_train: int, n_test: int, alpha: float = 0.05) -> dict:
-    """Nadeau & Bengio (2003) corrected resampled t-test.
+def corrected_resampled_ttest(
+    diffs,
+    n_train: int,
+    n_test: int,
+    alpha: float = 0.05,
+) -> dict:
+    """Nadeau & Bengio corrected resampled t-test."""
 
-    Repeated random train/test splits overlap, so scores are NOT independent and an
-    ordinary paired t-test is too optimistic. The correction inflates the variance by
-    (1/k + n_test/n_train).
-    """
     d = np.asarray(diffs, dtype=float)
-    k, m, v = len(d), float(d.mean()), float(d.var(ddof=1))
+
+    k = len(d)
+    m = float(d.mean())
+    v = float(d.var(ddof=1))
+
     if is_constant(d):
+        if abs(m) <= EPS:
+            return {
+                "t": None,
+                "df": k - 1,
+                "p": 1.0,
+                "ci": (m, m),
+                "se": 0.0,
+            }
+
+        # Non-zero constant differences provide no variance estimate.
+        # Do not manufacture a significance result.
         return {
-             "t": None,
-             "df": k - 1,
-             "p": 1.0 if abs(m) <= EPS else None,
-             "ci": (m, m),
-              "se": 0.0,
-    }
+            "t": None,
+            "df": k - 1,
+            "p": None,
+            "ci": None,
+            "se": 0.0,
+        }
+
     se = math.sqrt((1.0 / k + n_test / n_train) * v)
+
+    if se <= EPS:
+        return {
+            "t": None,
+            "df": k - 1,
+            "p": None,
+            "ci": None,
+            "se": se,
+        }
+
     t = m / se
     p = float(2 * stats.t.sf(abs(t), k - 1))
-    half = float(stats.t.ppf(1 - alpha / 2, k - 1) * se)
-    return {"t": _f(t), "df": k - 1, "p": p, "ci": (m - half, m + half), "se": se}
 
+    half = float(
+        stats.t.ppf(1 - alpha / 2, k - 1) * se
+    )
+
+    return {
+        "t": _f(t),
+        "df": k - 1,
+        "p": _f(p),
+        "ci": (m - half, m + half),
+        "se": se,
+    }
 
 def holm_adjust(pvals: list[float]) -> list[float]:
     """Holm-Bonferroni step-down adjusted p-values (controls family-wise error)."""
@@ -159,5 +198,17 @@ def paired_analysis(baseline, treatment, n_train: int | None = None, n_test: int
     else:
         test, p = "wilcoxon_signed_rank", alt["wilcoxon_p"]
         ci, es, es_name = bootstrap_ci(d, alpha=alpha, seed=seed), rank_biserial_paired(d), "rank_biserial"
-    return {**out, "test": test, "p": _f(p), "ci": [_f(ci[0]), _f(ci[1])], "effect_size": es,
-            "effect_size_name": es_name, "normality": norm, "alternatives": alt}
+    return {
+    **out,
+    "test": test,
+    "p": _f(p),
+    "ci": (
+        [_f(ci[0]), _f(ci[1])]
+        if ci is not None
+        else None
+    ),
+    "effect_size": _f(es),
+    "effect_size_name": es_name,
+    "normality": norm,
+    "alternatives": alt,
+}
